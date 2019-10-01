@@ -38,6 +38,7 @@ from matplotlib.text import Text, TextWithDash
 from matplotlib.transforms import (Affine2D, Bbox, BboxTransformTo,
                                    TransformedBbox)
 import matplotlib._layoutbox as layoutbox
+import os
 
 _log = logging.getLogger(__name__)
 
@@ -2166,6 +2167,10 @@ default: 'top'
             using Pillow, i.e. JPEG, TIFF, and (if the keyword is set to a
             non-None value) PNG.
         """
+        kwargs.setdefault('makedirs', True)
+        if kwargs["makedirs"]:
+            dirs = "/".join(fname.split("/")[:-1])
+            os.makedirs(dirs, exist_ok=True)
 
         kwargs.setdefault('dpi', rcParams['savefig.dpi'])
         if "frameon" in kwargs:
