@@ -28,13 +28,13 @@ the `API changes <../../api/api_changes.html>`_.
 2015-01-23 Text bounding boxes are now computed with advance width rather than
            ink area.  This may result in slightly different placement of text.
 
-2014-10-27 Allowed selection of the backend using the `MPLBACKEND` environment
+2014-10-27 Allowed selection of the backend using the :envvar:`MPLBACKEND` environment
            variable. Added documentation on backend selection methods.
 
-2014-09-27 Overhauled `colors.LightSource`.  Added `LightSource.hillshade` to
+2014-09-27 Overhauled `.colors.LightSource`.  Added `.LightSource.hillshade` to
            allow the independent generation of illumination maps. Added new
            types of blending for creating more visually appealing shaded relief
-           plots (e.g.  `blend_mode="overlay"`, etc, in addition to the legacy
+           plots (e.g.  ``blend_mode="overlay"``, etc, in addition to the legacy
            "hsv" mode).
 
 2014-06-10 Added Colorbar.remove()
@@ -78,10 +78,10 @@ the `API changes <../../api/api_changes.html>`_.
 
 2014-04-22 Added an example showing the difference between
            interpolation = 'none' and interpolation = 'nearest' in
-           `imshow()` when saving vector graphics files.
+           `~.Axes.imshow` when saving vector graphics files.
 
-2014-04-22 Added violin plotting functions. See `Axes.violinplot`,
-           `Axes.violin`, `cbook.violin_stats` and `mlab.GaussianKDE` for
+2014-04-22 Added violin plotting functions. See `.Axes.violinplot`,
+           `.Axes.violin`, `.cbook.violin_stats` and `.mlab.GaussianKDE` for
            details.
 
 2014-04-10 Fixed the triangular marker rendering error. The "Up" triangle was
@@ -90,11 +90,11 @@ the `API changes <../../api/api_changes.html>`_.
 2014-04-08 Fixed a bug in parasite_axes.py by making a list out
            of a generator at line 263.
 
-2014-04-02 Added `clipon=False` to patch creation of wedges and shadows
-           in `pie`.
+2014-04-02 Added ``clipon=False`` to patch creation of wedges and shadows
+           in `~.Axes.pie`.
 
 2014-02-25 In backend_qt4agg changed from using update -> repaint under
-           windows.  See comment in source near `self._priv_update` for
+           windows.  See comment in source near ``self._priv_update`` for
            longer explaination.
 
 2014-03-27 Added tests for pie ccw parameter. Removed pdf and svg images
@@ -123,7 +123,7 @@ the `API changes <../../api/api_changes.html>`_.
 
 2014-03-13 Add parameter 'clockwise' to function pie, True by default.
 
-2014-02-28 Added 'origin' kwarg to `spy`
+2014-02-28 Added 'origin' kwarg to `~.Axes.spy`
 
 2014-02-27 Implemented separate horizontal/vertical axes padding to the
            ImageGrid in the AxesGrid toolkit
@@ -134,10 +134,10 @@ the `API changes <../../api/api_changes.html>`_.
            along the line.
 
 2014-02-25 In backend_qt4agg changed from using update -> repaint under
-           windows.  See comment in source near `self._priv_update` for
+           windows.  See comment in source near ``self._priv_update`` for
            longer explaination.
 
-2014-01-02 `triplot` now returns the artist it adds and support of line and
+2014-01-02 `~.Axes.triplot` now returns the artist it adds and support of line and
            marker kwargs has been improved. GBY
 
 2013-12-30 Made streamplot grid size consistent for different types of density
@@ -146,7 +146,7 @@ the `API changes <../../api/api_changes.html>`_.
 
 2013-12-03 Added a pure boxplot-drawing method that allow a more complete
            customization of boxplots. It takes a list of dicts contains stats.
-           Also created a function (`cbook.boxplot_stats`) that generates the
+           Also created a function (`.cbook.boxplot_stats`) that generates the
            stats needed.
 
 2013-11-28 Added qhull extension module to perform Delaunay triangulation more
@@ -228,8 +228,8 @@ the `API changes <../../api/api_changes.html>`_.
 2013-03-31 Added support for arbitrary unstructured user-specified
            triangulations to Axes3D.tricontour[f] - Damon McDougall
 
-2013-03-19 Added support for passing `linestyle` kwarg to `step` so all `plot`
-           kwargs are passed to the underlying `plot` call.  -TAC
+2013-03-19 Added support for passing *linestyle* kwarg to `~.Axes.step` so all `~.Axes.plot`
+           kwargs are passed to the underlying `~.Axes.plot` call.  -TAC
 
 2013-02-25 Added classes CubicTriInterpolator, UniformTriRefiner, TriAnalyzer
            to matplotlib.tri module. - GBy
@@ -268,7 +268,7 @@ the `API changes <../../api/api_changes.html>`_.
            the alignment of text elements. - pwuertz
 
 2012-11-26 deprecate matplotlib/mpl.py, which was used only in pylab.py and is
-           now replaced by the more suitable `import matplotlib as mpl`. - PI
+           now replaced by the more suitable ``import matplotlib as mpl``. - PI
 
 2012-11-25 Make rc_context available via pyplot interface - PI
 
@@ -1002,7 +1002,7 @@ the `API changes <../../api/api_changes.html>`_.
 
 2009-07-19 Fixed the docstring of Axes.step to reflect the correct
            meaning of the kwargs "pre" and "post" - See SF bug
-           https://sourceforge.net/tracker/index.php?func=detail&aid=2823304&group_id=80706&atid=560720
+           \https://sourceforge.net/tracker/index.php?func=detail&aid=2823304&group_id=80706&atid=560720
            - JDH
 
 2009-07-18 Fix support for hatches without color fills to pdf and svg
@@ -1797,7 +1797,7 @@ the `API changes <../../api/api_changes.html>`_.
 2008-06-10 Bar now applies the label only to the first patch only, and
            sets '_nolegend_' for the other patch labels.  This lets
            autolegend work as expected for hist and bar - see
-           https://sourceforge.net/tracker/index.php?func=detail&aid=1986597&group_id=80706&atid=560720
+           \https://sourceforge.net/tracker/index.php?func=detail&aid=1986597&group_id=80706&atid=560720
            JDH
 
 2008-06-10 Fix text baseline alignment bug.  [ 1985420 ] Repair of
@@ -1860,11 +1860,11 @@ the `API changes <../../api/api_changes.html>`_.
 
 2008-05-28 Allow keyword args to configure widget properties as
            requested in
-           http://sourceforge.net/tracker/index.php?func=detail&aid=1866207&group_id=80706&atid=560722
+           \http://sourceforge.net/tracker/index.php?func=detail&aid=1866207&group_id=80706&atid=560722
            - JDH
 
 2008-05-28 Replaced '-' with u'\u2212' for minus sign as requested in
-           http://sourceforge.net/tracker/index.php?func=detail&aid=1962574&group_id=80706&atid=560720
+           \http://sourceforge.net/tracker/index.php?func=detail&aid=1962574&group_id=80706&atid=560720
 
 2008-05-28 zero width/height Rectangles no longer influence the
            autoscaler.  Useful for log histograms with empty bins -
@@ -2555,11 +2555,11 @@ the `API changes <../../api/api_changes.html>`_.
            writable HOME/.matplotlib already exists - JDH
 
 2007-06-27 Fixed locale bug reported at
-           http://sourceforge.net/tracker/index.php?func=detail&aid=1744154&group_id=80706&atid=560720
+           \http://sourceforge.net/tracker/index.php?func=detail&aid=1744154&group_id=80706&atid=560720
            by adding a cbook.unicode_safe function - JDH
 
 2007-06-27 Applied Micheal's tk savefig bugfix described at
-           http://sourceforge.net/tracker/index.php?func=detail&aid=1716732&group_id=80706&atid=560720
+           \http://sourceforge.net/tracker/index.php?func=detail&aid=1716732&group_id=80706&atid=560720
            Thanks Michael!
 
 
@@ -2954,7 +2954,7 @@ the `API changes <../../api/api_changes.html>`_.
            subplots_adjust - JDH
 
 2006-10-31 Applied axes3d patch 1587359
-           http://sourceforge.net/tracker/index.php?func=detail&aid=1587359&group_id=80706&atid=560722
+           \http://sourceforge.net/tracker/index.php?func=detail&aid=1587359&group_id=80706&atid=560722
            JDH
 
 -------------------------
@@ -4098,7 +4098,7 @@ the `API changes <../../api/api_changes.html>`_.
 
 2005-05-27 Got win32 build system working again, using a more recent
            version of gtk and pygtk in the win32 build, gtk 2.6 from
-           http://www.gimp.org/~tml/gimp/win32/downloads.html (you
+           https://web.archive.org/web/20050527002647/https://www.gimp.org/~tml/gimp/win32/downloads.html (you
            will also need libpng12.dll to use these).  I haven't
            tested whether this binary build of mpl for win32 will work
            with older gtk runtimes, so you may need to upgrade.

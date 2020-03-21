@@ -12,8 +12,10 @@ import sys
 import tempfile
 import weakref
 
+from PIL import Image
+
 import matplotlib as mpl
-from matplotlib import _png, cbook, font_manager as fm, __version__, rcParams
+from matplotlib import cbook, font_manager as fm
 from matplotlib.backend_bases import (
     _Backend, FigureCanvasBase, FigureManagerBase, GraphicsContextBase,
     RendererBase)
@@ -33,12 +35,12 @@ _log = logging.getLogger(__name__)
 def get_fontspec():
     """Build fontspec preamble from rc."""
     latex_fontspec = []
-    texcommand = rcParams["pgf.texsystem"]
+    texcommand = mpl.rcParams["pgf.texsystem"]
 
     if texcommand != "pdflatex":
         latex_fontspec.append("\\usepackage{fontspec}")
 
-    if texcommand != "pdflatex" and rcParams["pgf.rcfonts"]:
+    if texcommand != "pdflatex" and mpl.rcParams["pgf.rcfonts"]:
         families = ["serif", "sans\\-serif", "monospace"]
         commands = ["setmainfont", "setsansfont", "setmonofont"]
         for family, command in zip(families, commands):
@@ -53,7 +55,7 @@ def get_fontspec():
 
 def get_preamble():
     """Get LaTeX preamble from rc."""
-    return rcParams["pgf.preamble"]
+    return mpl.rcParams["pgf.preamble"]
 
 ###############################################################################
 
@@ -129,7 +131,7 @@ def _font_properties_str(prop):
     if family in families:
         commands.append(families[family])
     elif (any(font.name == family for font in fm.fontManager.ttflist)
-          and rcParams["pgf.texsystem"] != "pdflatex"):
+          and mpl.rcParams["pgf.texsystem"] != "pdflatex"):
         commands.append(r"\setmainfont{%s}\rmfamily" % family)
     else:
         pass  # print warning?
@@ -180,33 +182,11 @@ class LatexError(Exception):
         self.latex_output = latex_output
 
 
-@cbook.deprecated("3.1")
-class LatexManagerFactory:
-    previous_instance = None
-
-    @staticmethod
-    def get_latex_manager():
-        texcommand = rcParams["pgf.texsystem"]
-        latex_header = LatexManager._build_latex_header()
-        prev = LatexManagerFactory.previous_instance
-
-        # Check if the previous instance of LatexManager can be reused.
-        if (prev and prev.latex_header == latex_header
-                and prev.texcommand == texcommand):
-            _log.debug("reusing LatexManager")
-            return prev
-        else:
-            _log.debug("creating LatexManager")
-            new_inst = LatexManager()
-            LatexManagerFactory.previous_instance = new_inst
-            return new_inst
-
-
 class LatexManager:
     """
     The LatexManager opens an instance of the LaTeX application for
     determining the metrics of text elements. The LaTeX environment can be
-    modified by setting fonts and/or a custom preamble in the rc parameters.
+    modified by setting fonts and/or a custom preamble in `.rcParams`.
     """
     _unclean_instances = weakref.WeakSet()
 
@@ -221,7 +201,7 @@ class LatexManager:
             r"\documentclass{minimal}",
             # Include TeX program name as a comment for cache invalidation.
             # TeX does not allow this to be the first line.
-            r"% !TeX program = {}".format(rcParams["pgf.texsystem"]),
+            rf"% !TeX program = {mpl.rcParams['pgf.texsystem']}",
             # Test whether \includegraphics supports interpolate option.
             r"\usepackage{graphicx}",
             latex_preamble,
@@ -252,21 +232,25 @@ class LatexManager:
             latex_manager._cleanup()
 
     def _stdin_writeln(self, s):
-        self.latex_stdin_utf8.write(s)
-        self.latex_stdin_utf8.write("\n")
-        self.latex_stdin_utf8.flush()
+        if self.latex is None:
+            self._setup_latex_process()
+        self.latex.stdin.write(s)
+        self.latex.stdin.write("\n")
+        self.latex.stdin.flush()
 
     def _expect(self, s):
-        exp = s.encode("utf8")
-        buf = bytearray()
+        s = list(s)
+        chars = []
         while True:
-            b = self.latex.stdout.read(1)
-            buf += b
-            if buf[-len(exp):] == exp:
+            c = self.latex.stdout.read(1)
+            chars.append(c)
+            if chars[-len(s):] == s:
                 break
-            if not len(b):
-                raise LatexError("LaTeX process halted", buf.decode("utf8"))
-        return buf.decode("utf8")
+            if not c:
+                self.latex.kill()
+                self.latex = None
+                raise LatexError("LaTeX process halted", "".join(chars))
+        return "".join(chars)
 
     def _expect_prompt(self):
         return self._expect("\n*")
@@ -281,48 +265,52 @@ class LatexManager:
         LatexManager._unclean_instances.add(self)
 
         # test the LaTeX setup to ensure a clean startup of the subprocess
-        self.texcommand = rcParams["pgf.texsystem"]
+        self.texcommand = mpl.rcParams["pgf.texsystem"]
         self.latex_header = LatexManager._build_latex_header()
         latex_end = "\n\\makeatletter\n\\@@end\n"
         try:
-            latex = subprocess.Popen([self.texcommand, "-halt-on-error"],
-                                     stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE,
-                                     cwd=self.tmpdir)
-        except FileNotFoundError:
+            latex = subprocess.Popen(
+                [self.texcommand, "-halt-on-error"],
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                encoding="utf-8", cwd=self.tmpdir)
+        except FileNotFoundError as err:
             raise RuntimeError(
-                "Latex command not found. Install %r or change "
-                "pgf.texsystem to the desired command." % self.texcommand)
-        except OSError:
-            raise RuntimeError("Error starting process %r" % self.texcommand)
+                f"{self.texcommand} not found.  Install it or change "
+                f"rcParams['pgf.texsystem'] to an available TeX "
+                f"implementation.") from err
+        except OSError as err:
+            raise RuntimeError("Error starting process %r" %
+                               self.texcommand) from err
         test_input = self.latex_header + latex_end
-        stdout, stderr = latex.communicate(test_input.encode("utf-8"))
+        stdout, stderr = latex.communicate(test_input)
         if latex.returncode != 0:
             raise LatexError("LaTeX returned an error, probably missing font "
                              "or error in preamble:\n%s" % stdout)
 
+        self.latex = None  # Will be set up on first use.
+        self.str_cache = {}  # cache for strings already processed
+
+    def _setup_latex_process(self):
         # open LaTeX process for real work
-        latex = subprocess.Popen([self.texcommand, "-halt-on-error"],
-                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                 cwd=self.tmpdir)
-        self.latex = latex
-        self.latex_stdin_utf8 = codecs.getwriter("utf8")(self.latex.stdin)
+        self.latex = subprocess.Popen(
+            [self.texcommand, "-halt-on-error"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            encoding="utf-8", cwd=self.tmpdir)
         # write header with 'pgf_backend_query_start' token
         self._stdin_writeln(self._build_latex_header())
         # read all lines until our 'pgf_backend_query_start' token appears
         self._expect("*pgf_backend_query_start")
         self._expect_prompt()
 
-        # cache for strings already processed
-        self.str_cache = {}
+    @cbook.deprecated("3.3")
+    def latex_stdin_utf8(self):
+        return self.latex.stdin
 
     def _cleanup(self):
         if not self._os_path.isdir(self.tmpdir):
             return
         try:
             self.latex.communicate()
-            self.latex_stdin_utf8.close()
-            self.latex.stdout.close()
         except Exception:
             pass
         try:
@@ -355,7 +343,7 @@ class LatexManager:
             self._expect_prompt()
         except LatexError as e:
             raise ValueError("Error processing '{}'\nLaTeX Output:\n{}"
-                             .format(text, e.latex_output))
+                             .format(text, e.latex_output)) from e
 
         # typeout width, height and text offset of the last textbox
         self._stdin_writeln(r"\typeout{\the\wd0,\the\ht0,\the\dp0}")
@@ -364,14 +352,14 @@ class LatexManager:
             answer = self._expect_prompt()
         except LatexError as e:
             raise ValueError("Error processing '{}'\nLaTeX Output:\n{}"
-                             .format(text, e.latex_output))
+                             .format(text, e.latex_output)) from e
 
         # parse metrics from the answer string
         try:
             width, height, offset = answer.splitlines()[0].split(",")
-        except Exception:
+        except Exception as err:
             raise ValueError("Error processing '{}'\nLaTeX Output:\n{}"
-                             .format(text, answer))
+                             .format(text, answer)) from err
         w, h, o = float(width[:-2]), float(height[:-2]), float(offset[:-2])
 
         # the height returned from LaTeX goes from base to top.
@@ -398,6 +386,7 @@ def _get_image_inclusion_command():
 
 class RendererPgf(RendererBase):
 
+    @cbook._delete_parameter("3.3", "dummy")
     def __init__(self, figure, fh, dummy=False):
         """
         Creates a new PGF renderer that translates any drawing instruction
@@ -424,15 +413,9 @@ class RendererPgf(RendererBase):
             for m in RendererPgf.__dict__:
                 if m.startswith("draw_"):
                     self.__dict__[m] = lambda *args, **kwargs: None
-        else:
-            # if fh does not belong to a filename, deactivate draw_image
-            if not hasattr(fh, 'name') or not os.path.exists(fh.name):
-                cbook._warn_external("streamed pgf-code does not support "
-                                     "raster graphics, consider using the "
-                                     "pgf-to-pdf option", UserWarning)
-                self.__dict__["draw_image"] = lambda *args, **kwargs: None
 
     @cbook.deprecated("3.2")
+    @property
     def latexManager(self):
         return self._latexManager
 
@@ -648,7 +631,7 @@ class RendererPgf(RendererBase):
 
     def option_image_nocomposite(self):
         # docstring inherited
-        return not rcParams['image.composite_image']
+        return not mpl.rcParams['image.composite_image']
 
     def draw_image(self, gc, x, y, im, transform=None):
         # docstring inherited
@@ -657,13 +640,16 @@ class RendererPgf(RendererBase):
         if w == 0 or h == 0:
             return
 
+        if not os.path.exists(getattr(self.fh, "name", "")):
+            cbook._warn_external(
+                "streamed pgf-code does not support raster graphics, consider "
+                "using the pgf-to-pdf option.")
+
         # save the images to png files
-        path = os.path.dirname(self.fh.name)
-        fname = os.path.splitext(os.path.basename(self.fh.name))[0]
-        fname_img = "%s-img%d.png" % (fname, self.image_counter)
+        path = pathlib.Path(self.fh.name)
+        fname_img = "%s-img%d.png" % (path.stem, self.image_counter)
+        Image.fromarray(im[::-1]).save(path.parent / fname_img)
         self.image_counter += 1
-        with pathlib.Path(path, fname_img).open("wb") as file:
-            _png.write_png(im[::-1], file)
 
         # reference the image in the pgf picture
         writeln(self.fh, r"\begin{pgfscope}")
@@ -769,15 +755,10 @@ class RendererPgf(RendererBase):
         # docstring inherited
         return points * mpl_pt_to_in * self.dpi
 
-    def new_gc(self):
-        # docstring inherited
-        return GraphicsContextPgf()
 
-
+@cbook.deprecated("3.3", alternative="GraphicsContextBase")
 class GraphicsContextPgf(GraphicsContextBase):
     pass
-
-########################################################################
 
 
 class TmpDirCleaner:
@@ -872,7 +853,7 @@ class FigureCanvasPgf(FigureCanvasBase):
 
     def print_pgf(self, fname_or_fh, *args, **kwargs):
         """
-        Output pgf commands for drawing the figure so it can be included and
+        Output pgf macros for drawing the figure so it can be included and
         rendered in latex documents.
         """
         if kwargs.get("dryrun", False):
@@ -911,7 +892,7 @@ class FigureCanvasPgf(FigureCanvasBase):
 \\end{document}""" % (w, h, latex_preamble, latex_fontspec)
             pathlib.Path(fname_tex).write_text(latexcode, encoding="utf-8")
 
-            texcommand = rcParams["pgf.texsystem"]
+            texcommand = mpl.rcParams["pgf.texsystem"]
             cbook._check_and_log_subprocess(
                 [texcommand, "-interaction=nonstopmode", "-halt-on-error",
                  "figure.tex"], _log, cwd=tmpdir)
@@ -962,17 +943,15 @@ class FigureCanvasPgf(FigureCanvasBase):
             self._print_png_to_fh(file, *args, **kwargs)
 
     def get_renderer(self):
-        return RendererPgf(self.figure, None, dummy=True)
+        return RendererPgf(self.figure, None)
 
 
-class FigureManagerPgf(FigureManagerBase):
-    pass
+FigureManagerPgf = FigureManagerBase
 
 
 @_Backend.export
 class _BackendPgf(_Backend):
     FigureCanvas = FigureCanvasPgf
-    FigureManager = FigureManagerPgf
 
 
 def _cleanup_all():
@@ -1017,21 +996,20 @@ class PdfPages:
         Parameters
         ----------
         filename : str or path-like
-            Plots using :meth:`PdfPages.savefig` will be written to a file at
-            this location. Any older file with the same name is overwritten.
+            Plots using `PdfPages.savefig` will be written to a file at this
+            location. Any older file with the same name is overwritten.
         keep_empty : bool, optional
             If set to False, then empty pdf files will be deleted automatically
             when closed.
-        metadata : dictionary, optional
+        metadata : dict, optional
             Information dictionary object (see PDF reference section 10.2.1
             'Document Information Dictionary'), e.g.:
-            `{'Creator': 'My software', 'Author': 'Me',
-            'Title': 'Awesome fig'}`
+            ``{'Creator': 'My software', 'Author': 'Me', 'Title': 'Awesome'}``.
 
-            The standard keys are `'Title'`, `'Author'`, `'Subject'`,
-            `'Keywords'`, `'Producer'`, `'Creator'` and `'Trapped'`.
-            Values have been predefined for `'Creator'` and `'Producer'`.
-            They can be removed by setting them to the empty string.
+            The standard keys are 'Title', 'Author', 'Subject', 'Keywords',
+            'Creator', 'Producer', 'CreationDate', 'ModDate', and
+            'Trapped'. Values have been predefined for 'Creator', 'Producer'
+            and 'CreationDate'. They can be removed by setting them to `None`.
         """
         self._outputfile = filename
         self._n_figures = 0
@@ -1051,8 +1029,8 @@ class PdfPages:
             'producer', 'trapped'
         }
         infoDict = {
-            'creator': 'matplotlib %s, https://matplotlib.org' % __version__,
-            'producer': 'matplotlib pgf backend %s' % __version__,
+            'creator': f'matplotlib {mpl.__version__}, https://matplotlib.org',
+            'producer': f'matplotlib pgf backend {mpl.__version__}',
         }
         metadata = {k.lower(): v for k, v in self.metadata.items()}
         infoDict.update(metadata)
@@ -1117,7 +1095,7 @@ class PdfPages:
             open(self._outputfile, 'wb').close()
 
     def _run_latex(self):
-        texcommand = rcParams["pgf.texsystem"]
+        texcommand = mpl.rcParams["pgf.texsystem"]
         cbook._check_and_log_subprocess(
             [texcommand, "-interaction=nonstopmode", "-halt-on-error",
              os.path.basename(self._fname_tex)],
@@ -1127,18 +1105,17 @@ class PdfPages:
 
     def savefig(self, figure=None, **kwargs):
         """
-        Saves a :class:`~matplotlib.figure.Figure` to this file as a new page.
+        Saves a `.Figure` to this file as a new page.
 
-        Any other keyword arguments are passed to
-        :meth:`~matplotlib.figure.Figure.savefig`.
+        Any other keyword arguments are passed to `~.Figure.savefig`.
 
         Parameters
         ----------
-        figure : :class:`~matplotlib.figure.Figure` or int, optional
+        figure : `.Figure` or int, optional
             Specifies what figure is saved to file. If not specified, the
-            active figure is saved. If a :class:`~matplotlib.figure.Figure`
-            instance is provided, this figure is saved. If an int is specified,
-            the figure instance to save is looked up by number.
+            active figure is saved. If a `.Figure` instance is provided, this
+            figure is saved. If an int is specified, the figure instance to
+            save is looked up by number.
         """
         if not isinstance(figure, Figure):
             if figure is None:

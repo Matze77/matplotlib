@@ -87,6 +87,7 @@ Spans
    Axes.axhspan
    Axes.axvline
    Axes.axvspan
+   Axes.axline
 
 Spectral
 --------
@@ -365,6 +366,9 @@ Aspect ratio
    Axes.apply_aspect
    Axes.set_aspect
    Axes.get_aspect
+
+   Axes.set_box_aspect
+   Axes.get_box_aspect
 
    Axes.set_adjustable
    Axes.get_adjustable

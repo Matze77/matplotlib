@@ -20,8 +20,10 @@ import warnings
 import zlib
 
 import numpy as np
+from PIL import Image
 
-from matplotlib import _text_layout, cbook, __version__, rcParams
+import matplotlib as mpl
+from matplotlib import _text_layout, cbook
 from matplotlib._pylab_helpers import Gcf
 from matplotlib.backend_bases import (
     _Backend, FigureCanvasBase, FigureManagerBase, GraphicsContextBase,
@@ -39,7 +41,6 @@ from matplotlib.transforms import Affine2D, BboxBase
 from matplotlib.path import Path
 from matplotlib.dates import UTC
 from matplotlib import _path
-from matplotlib import _png
 from matplotlib import ttconv
 from . import _backend_pdf_ps
 
@@ -376,8 +377,9 @@ class Stream:
                                'DecodeParms': png})
 
         self.pdfFile.recordXref(self.id)
-        if rcParams['pdf.compression'] and not png:
-            self.compressobj = zlib.compressobj(rcParams['pdf.compression'])
+        if mpl.rcParams['pdf.compression'] and not png:
+            self.compressobj = zlib.compressobj(
+                mpl.rcParams['pdf.compression'])
         if self.len is None:
             self.file = BytesIO()
         else:
@@ -389,7 +391,7 @@ class Stream:
         write(b"%d 0 obj\n" % self.id)
         dict = self.extra
         dict['Length'] = self.len
-        if rcParams['pdf.compression']:
+        if mpl.rcParams['pdf.compression']:
             dict['Filter'] = Name('FlateDecode')
 
         write(pdfRepr(dict))
@@ -442,15 +444,15 @@ class PdfFile:
         metadata : dict from strings to strings and dates
             Information dictionary object (see PDF reference section 10.2.1
             'Document Information Dictionary'), e.g.:
-            `{'Creator': 'My software', 'Author': 'Me',
-            'Title': 'Awesome fig'}`.
+            ``{'Creator': 'My software', 'Author': 'Me', 'Title': 'Awesome'}``.
 
-            The standard keys are `'Title'`, `'Author'`, `'Subject'`,
-            `'Keywords'`, `'Creator'`, `'Producer'`, `'CreationDate'`,
-            `'ModDate'`, and `'Trapped'`. Values have been predefined
-            for `'Creator'`, `'Producer'` and `'CreationDate'`. They
-            can be removed by setting them to `None`.
+            The standard keys are 'Title', 'Author', 'Subject', 'Keywords',
+            'Creator', 'Producer', 'CreationDate', 'ModDate', and
+            'Trapped'. Values have been predefined for 'Creator', 'Producer'
+            and 'CreationDate'. They can be removed by setting them to `None`.
         """
+        super().__init__()
+
         self._object_seq = itertools.count(1)  # consumed by reserveObject
         self.xrefTable = [[0, 65535, 'the zero object']]
         self.passed_in_file_object = False
@@ -499,8 +501,8 @@ class PdfFile:
             source_date = datetime.today()
 
         self.infoDict = {
-            'Creator': 'matplotlib %s, http://matplotlib.org' % __version__,
-            'Producer': 'matplotlib pdf backend %s' % __version__,
+            'Creator': f'matplotlib {mpl.__version__}, http://matplotlib.org',
+            'Producer': f'matplotlib pdf backend {mpl.__version__}',
             'CreationDate': source_date
         }
         if metadata is not None:
@@ -513,7 +515,7 @@ class PdfFile:
         self.dviFontInfo = {}   # maps dvi font names to embedding information
         # differently encoded Type-1 fonts may share the same descriptor
         self.type1Descriptors = {}
-        self.used_characters = {}
+        self._character_tracker = _backend_pdf_ps.CharacterTracker()
 
         self.alphaStates = {}   # maps alpha values to graphics state objects
         self._alpha_state_seq = (Name(f'A{i}') for i in itertools.count(1))
@@ -536,8 +538,7 @@ class PdfFile:
         self.pageAnnotations = []  # A list of annotations for the current page
 
         # The PDF spec recommends to include every procset
-        procsets = [Name(x)
-                    for x in "PDF Text ImageB ImageC ImageI".split()]
+        procsets = [Name(x) for x in "PDF Text ImageB ImageC ImageI".split()]
 
         # Write resource dictionary.
         # Possibly TODO: more general ExtGState (graphics state dictionaries)
@@ -549,6 +550,11 @@ class PdfFile:
                      'Shading': self.gouraudObject,
                      'ProcSet': procsets}
         self.writeObject(self.resourceObject, resources)
+
+    @cbook.deprecated("3.3")
+    @property
+    def used_characters(self):
+        return self.file._character_tracker.used_characters
 
     def newPage(self, width, height):
         self.endStream()
@@ -590,7 +596,7 @@ class PdfFile:
         self.pageAnnotations.append(annotObject)
 
     def finalize(self):
-        "Write out the various deferred objects and the pdf end matter."
+        """Write out the various deferred objects and the pdf end matter."""
 
         self.endStream()
         self.writeFonts()
@@ -622,7 +628,7 @@ class PdfFile:
         self.writeTrailer()
 
     def close(self):
-        "Flush all buffers and free all resources."
+        """Flush all buffers and free all resources."""
 
         self.endStream()
         if self.passed_in_file_object:
@@ -660,13 +666,9 @@ class PdfFile:
 
         if isinstance(fontprop, str):
             filename = fontprop
-        elif rcParams['pdf.use14corefonts']:
+        elif mpl.rcParams['pdf.use14corefonts']:
             filename = findfont(
                 fontprop, fontext='afm', directory=RendererPdf._afm_font_dir)
-            if filename is None:
-                filename = findfont(
-                    "Helvetica",
-                    fontext='afm', directory=RendererPdf._afm_font_dir)
         else:
             filename = findfont(fontprop)
 
@@ -681,7 +683,7 @@ class PdfFile:
     def dviFontName(self, dvifont):
         """
         Given a dvi font object, return a name suitable for Op.selectfont.
-        This registers the font information in self.dviFontInfo if not yet
+        This registers the font information in ``self.dviFontInfo`` if not yet
         registered.
         """
 
@@ -724,10 +726,9 @@ class PdfFile:
             else:
                 # a normal TrueType font
                 _log.debug('Writing TrueType font.')
-                realpath, stat_key = cbook.get_realpath_and_stat(filename)
-                chars = self.used_characters.get(stat_key)
-                if chars is not None and len(chars[1]):
-                    fonts[Fx] = self.embedTTF(realpath, chars[1])
+                chars = self._character_tracker.used.get(filename)
+                if chars:
+                    fonts[Fx] = self.embedTTF(filename, chars)
         self.writeObject(self.fontObject, fonts)
 
     def _write_afm_font(self, filename):
@@ -762,12 +763,11 @@ class PdfFile:
 
         # Encoding (if needed)
         if fontinfo.encodingfile is not None:
-            enc = dviread.Encoding(fontinfo.encodingfile)
-            differencesArray = [Name(ch) for ch in enc]
-            differencesArray = [0] + differencesArray
-            fontdict['Encoding'] = \
-                {'Type': Name('Encoding'),
-                 'Differences': differencesArray}
+            fontdict['Encoding'] = {
+                'Type': Name('Encoding'),
+                'Differences': [
+                    0, *map(Name, dviread._parse_enc(fontinfo.encodingfile))],
+            }
 
         # If no file is specified, stop short
         if fontinfo.fontfile is None:
@@ -868,9 +868,11 @@ class PdfFile:
         return fontdescObject
 
     def _get_xobject_symbol_name(self, filename, symbol_name):
-        return "%s-%s" % (
+        Fx = self.fontName(filename)
+        return "-".join([
+            Fx.name.decode(),
             os.path.splitext(os.path.basename(filename))[0],
-            symbol_name)
+            symbol_name])
 
     _identityToUnicodeCMap = b"""/CIDInit /ProcSet findresource begin
 12 dict begin
@@ -897,10 +899,10 @@ end"""
         """Embed the TTF font from the named file into the document."""
 
         font = get_font(filename)
-        fonttype = rcParams['pdf.fonttype']
+        fonttype = mpl.rcParams['pdf.fonttype']
 
         def cvt(length, upe=font.units_per_EM, nearest=True):
-            "Convert font coordinates to PDF glyph coordinates"
+            """Convert font coordinates to PDF glyph coordinates."""
             value = length / upe * 1000
             if nearest:
                 return round(value)
@@ -1321,7 +1323,7 @@ end"""
                             0, 0, sidelen, sidelen, Op.rectangle,
                             Op.fill)
 
-            self.output(rcParams['hatch.linewidth'], Op.setlinewidth)
+            self.output(mpl.rcParams['hatch.linewidth'], Op.setlinewidth)
 
             self.output(*self.pathOperations(
                 Path.hatch(path),
@@ -1416,7 +1418,6 @@ end"""
         ``(height, width, 3)`` (RGB) or ``(height, width, 1)`` (grayscale or
         alpha), except that alpha is None if the image is fully opaque.
         """
-        h, w = im.shape[:2]
         im = im[::-1]
         if im.ndim == 2:
             return im, None
@@ -1440,7 +1441,9 @@ end"""
         predictors with Flate compression.
         """
         buffer = BytesIO()
-        _png.write_png(data, buffer)
+        if data.shape[-1] == 1:
+            data = data.squeeze(axis=-1)
+        Image.fromarray(data).save(buffer, format="png")
         buffer.seek(8)
         while True:
             length, type = struct.unpack(b'!L4s', buffer.read(8))
@@ -1471,7 +1474,7 @@ end"""
                'BitsPerComponent': 8}
         if smask:
             obj['SMask'] = smask
-        if rcParams['pdf.compression']:
+        if mpl.rcParams['pdf.compression']:
             png = {'Predictor': 10, 'Colors': colors, 'Columns': width}
         else:
             png = None
@@ -1664,18 +1667,12 @@ end"""
 
 
 class RendererPdf(_backend_pdf_ps.RendererPDFPSBase):
-    @property
-    @cbook.deprecated("3.1")
-    def afm_font_cache(self, _cache=cbook.maxdict(50)):
-        return _cache
 
     _afm_font_dir = cbook._get_data_path("fonts/pdfcorefonts")
     _use_afm_rc_name = "pdf.use14corefonts"
 
     def __init__(self, file, image_dpi, height, width):
-        RendererBase.__init__(self)
-        self.height = height
-        self.width = width
+        super().__init__(width, height)
         self.file = file
         self.gc = self.new_gc()
         self.mathtext_parser = MathTextParser("Pdf")
@@ -1711,22 +1708,14 @@ class RendererPdf(_backend_pdf_ps.RendererPDFPSBase):
         gc._fillcolor = orig_fill
         gc._effective_alphas = orig_alphas
 
-    def track_characters(self, font, s):
+    @cbook.deprecated("3.3")
+    def track_characters(self, *args, **kwargs):
         """Keeps track of which characters are required from each font."""
-        if isinstance(font, str):
-            fname = font
-        else:
-            fname = font.fname
-        realpath, stat_key = cbook.get_realpath_and_stat(fname)
-        used_characters = self.file.used_characters.setdefault(
-            stat_key, (realpath, set()))
-        used_characters[1].update(map(ord, s))
+        self.file._character_tracker.track(*args, **kwargs)
 
-    def merge_used_characters(self, other):
-        for stat_key, (realpath, charset) in other.items():
-            used_characters = self.file.used_characters.setdefault(
-                stat_key, (realpath, set()))
-            used_characters[1].update(charset)
+    @cbook.deprecated("3.3")
+    def merge_used_characters(self, *args, **kwargs):
+        self.file._character_tracker.merge(*args, **kwargs)
 
     def get_image_magnification(self):
         return self.image_dpi/72.0
@@ -1936,12 +1925,12 @@ class RendererPdf(_backend_pdf_ps.RendererPDFPSBase):
         # TODO: fix positioning and encoding
         width, height, descent, glyphs, rects, used_characters = \
             self.mathtext_parser.parse(s, 72, prop)
-        self.merge_used_characters(used_characters)
+        self.file._character_tracker.merge(used_characters)
 
         # When using Type 3 fonts, we can't use character codes higher
         # than 255, so we use the "Do" command to render those
         # instead.
-        global_fonttype = rcParams['pdf.fonttype']
+        global_fonttype = mpl.rcParams['pdf.fonttype']
 
         # Set up a global transformation matrix for the whole math expression
         a = math.radians(angle)
@@ -2094,13 +2083,13 @@ class RendererPdf(_backend_pdf_ps.RendererPDFPSBase):
 
         fontsize = prop.get_size_in_points()
 
-        if rcParams['pdf.use14corefonts']:
+        if mpl.rcParams['pdf.use14corefonts']:
             font = self._get_font_afm(prop)
             fonttype = 1
         else:
             font = self._get_font_ttf(prop)
-            self.track_characters(font, s)
-            fonttype = rcParams['pdf.fonttype']
+            self.file._character_tracker.track(font, s)
+            fonttype = mpl.rcParams['pdf.fonttype']
             # We can't subset all OpenType fonts, so switch to Type 42
             # in that case.
             if is_opentype_cff_font(font.fname):
@@ -2259,7 +2248,7 @@ class GraphicsContextPdf(GraphicsContextBase):
                     name, Op.setcolor_nonstroke]
 
     def rgb_cmd(self, rgb):
-        if rcParams['pdf.inheritcolor']:
+        if mpl.rcParams['pdf.inheritcolor']:
             return []
         if rgb[0] == rgb[1] == rgb[2]:
             return [rgb[0], Op.setgray_stroke]
@@ -2267,7 +2256,7 @@ class GraphicsContextPdf(GraphicsContextBase):
             return [*rgb[:3], Op.setrgb_stroke]
 
     def fillcolor_cmd(self, rgb):
-        if rgb is None or rcParams['pdf.inheritcolor']:
+        if rgb is None or mpl.rcParams['pdf.inheritcolor']:
             return []
         elif rgb[0] == rgb[1] == rgb[2]:
             return [rgb[0], Op.setgray_nonstroke]
@@ -2288,7 +2277,7 @@ class GraphicsContextPdf(GraphicsContextBase):
         return [Op.grestore]
 
     def clip_cmd(self, cliprect, clippath):
-        """Set clip rectangle. Calls self.pop() and self.push()."""
+        """Set clip rectangle. Calls `.pop()` and `.push()`."""
         cmds = []
         # Pop graphics state until we hit the right one or the stack is empty
         while ((self._cliprect, self._clippath) != (cliprect, clippath)
@@ -2397,9 +2386,8 @@ class PdfPages:
 
     Notes
     -----
-    In reality :class:`PdfPages` is a thin wrapper around :class:`PdfFile`, in
-    order to avoid confusion when using :func:`~matplotlib.pyplot.savefig` and
-    forgetting the format argument.
+    In reality `PdfPages` is a thin wrapper around `PdfFile`, in order to avoid
+    confusion when using `~.pyplot.savefig` and forgetting the format argument.
     """
     __slots__ = ('_file', 'keep_empty')
 
@@ -2410,24 +2398,21 @@ class PdfPages:
         Parameters
         ----------
         filename : str or path-like or file-like
-            Plots using :meth:`PdfPages.savefig` will be written to a file at
-            this location. The file is opened at once and any older file with
-            the same name is overwritten.
+            Plots using `PdfPages.savefig` will be written to a file at this
+            location. The file is opened at once and any older file with the
+            same name is overwritten.
         keep_empty : bool, optional
             If set to False, then empty pdf files will be deleted automatically
             when closed.
-        metadata : dictionary, optional
+        metadata : dict, optional
             Information dictionary object (see PDF reference section 10.2.1
             'Document Information Dictionary'), e.g.:
-            `{'Creator': 'My software', 'Author': 'Me',
-            'Title': 'Awesome fig'}`
+            ``{'Creator': 'My software', 'Author': 'Me', 'Title': 'Awesome'}``.
 
-            The standard keys are `'Title'`, `'Author'`, `'Subject'`,
-            `'Keywords'`, `'Creator'`, `'Producer'`, `'CreationDate'`,
-            `'ModDate'`, and `'Trapped'`. Values have been predefined
-            for `'Creator'`, `'Producer'` and `'CreationDate'`. They
-            can be removed by setting them to `None`.
-
+            The standard keys are 'Title', 'Author', 'Subject', 'Keywords',
+            'Creator', 'Producer', 'CreationDate', 'ModDate', and
+            'Trapped'. Values have been predefined for 'Creator', 'Producer'
+            and 'CreationDate'. They can be removed by setting them to `None`.
         """
         self._file = PdfFile(filename, metadata=metadata)
         self.keep_empty = keep_empty
@@ -2460,18 +2445,17 @@ class PdfPages:
 
     def savefig(self, figure=None, **kwargs):
         """
-        Saves a :class:`~matplotlib.figure.Figure` to this file as a new page.
+        Saves a `.Figure` to this file as a new page.
 
-        Any other keyword arguments are passed to
-        :meth:`~matplotlib.figure.Figure.savefig`.
+        Any other keyword arguments are passed to `~.Figure.savefig`.
 
         Parameters
         ----------
-        figure : :class:`~matplotlib.figure.Figure` or int, optional
+        figure : `.Figure` or int, optional
             Specifies what figure is saved to file. If not specified, the
-            active figure is saved. If a :class:`~matplotlib.figure.Figure`
-            instance is provided, this figure is saved. If an int is specified,
-            the figure instance to save is looked up by number.
+            active figure is saved. If a `.Figure` instance is provided, this
+            figure is saved. If an int is specified, the figure instance to
+            save is looked up by number.
         """
         if not isinstance(figure, Figure):
             if figure is None:
@@ -2514,14 +2498,9 @@ class FigureCanvasPdf(FigureCanvasBase):
     ----------
     figure : `matplotlib.figure.Figure`
         A high-level Figure instance
-
     """
 
     fixed_dpi = 72
-
-    def draw(self):
-        pass
-
     filetypes = {'pdf': 'Portable Document Format'}
 
     def get_default_filetype(self):

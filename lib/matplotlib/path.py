@@ -14,7 +14,8 @@ from weakref import WeakValueDictionary
 
 import numpy as np
 
-from . import _path, cbook, rcParams
+import matplotlib as mpl
+from . import _path, cbook
 from .cbook import _to_unmasked_float_array, simple_linear_interpolation
 
 
@@ -119,7 +120,9 @@ class Path:
             intended for public use.
         closed : bool, optional
             If *codes* is None and closed is True, vertices will be treated as
-            line segments of a closed polygon.
+            line segments of a closed polygon.  Note that the last vertex will
+            then be ignored (as the corresponding code will be set to
+            CLOSEPOLY).
         readonly : bool, optional
             Makes the path behave in an immutable way and sets the vertices
             and codes as read-only arrays.
@@ -181,15 +184,15 @@ class Path:
             pth._interpolation_steps = internals_from._interpolation_steps
         else:
             pth._should_simplify = True
-            pth._simplify_threshold = rcParams['path.simplify_threshold']
+            pth._simplify_threshold = mpl.rcParams['path.simplify_threshold']
             pth._interpolation_steps = 1
         return pth
 
     def _update_values(self):
-        self._simplify_threshold = rcParams['path.simplify_threshold']
+        self._simplify_threshold = mpl.rcParams['path.simplify_threshold']
         self._should_simplify = (
             self._simplify_threshold > 0 and
-            rcParams['path.simplify'] and
+            mpl.rcParams['path.simplify'] and
             len(self._vertices) >= 128 and
             (self._codes is None or np.all(self._codes <= Path.LINETO))
         )
@@ -322,18 +325,15 @@ class Path:
 
     @classmethod
     def make_compound_path(cls, *args):
-        """Make a compound path from a list of Path objects."""
+        """
+        Make a compound path from a list of Path objects. Blindly removes all
+        Path.STOP control points.
+        """
         # Handle an empty list in args (i.e. no args).
         if not args:
             return Path(np.empty([0, 2], dtype=np.float32))
-
-        lengths = [len(x) for x in args]
-        total_length = sum(lengths)
-
-        vertices = np.vstack([x.vertices for x in args])
-        vertices.reshape((total_length, 2))
-
-        codes = np.empty(total_length, dtype=cls.code_type)
+        vertices = np.concatenate([x.vertices for x in args])
+        codes = np.empty(len(vertices), dtype=cls.code_type)
         i = 0
         for path in args:
             if path.codes is None:
@@ -342,6 +342,10 @@ class Path:
             else:
                 codes[i:i + len(path.codes)] = path.codes
             i += len(path.vertices)
+        # remove STOP's, since internal STOPs are a bug
+        not_stop_mask = codes != cls.STOP
+        vertices = vertices[not_stop_mask, :]
+        codes = codes[not_stop_mask]
 
         return cls(vertices, codes)
 
@@ -416,6 +420,7 @@ class Path:
                     curr_vertices = np.append(curr_vertices, next(vertices))
             yield curr_vertices, code
 
+    @cbook._delete_parameter("3.3", "quantize")
     def cleaned(self, transform=None, remove_nans=False, clip=None,
                 quantize=False, simplify=False, curves=False,
                 stroke_width=1.0, snap=False, sketch=None):
@@ -560,8 +565,8 @@ class Path:
 
         The bounding box is always considered filled.
         """
-        return _path.path_intersects_rectangle(self,
-            bbox.x0, bbox.y0, bbox.x1, bbox.y1, filled)
+        return _path.path_intersects_rectangle(
+            self, bbox.x0, bbox.y0, bbox.x1, bbox.y1, filled)
 
     def interpolated(self, steps):
         """
@@ -633,12 +638,8 @@ class Path:
         Return a `Path` instance of the unit rectangle from (0, 0) to (1, 1).
         """
         if cls._unit_rectangle is None:
-            cls._unit_rectangle = \
-                cls([[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0],
-                     [0.0, 0.0]],
-                    [cls.MOVETO, cls.LINETO, cls.LINETO, cls.LINETO,
-                     cls.CLOSEPOLY],
-                    readonly=True)
+            cls._unit_rectangle = cls([[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]],
+                                      closed=True, readonly=True)
         return cls._unit_rectangle
 
     _unit_regular_polygons = WeakValueDictionary()
@@ -659,11 +660,7 @@ class Path:
                      # "points-up".
                      + np.pi / 2)
             verts = np.column_stack((np.cos(theta), np.sin(theta)))
-            codes = np.empty(numVertices + 1)
-            codes[0] = cls.MOVETO
-            codes[1:-1] = cls.LINETO
-            codes[-1] = cls.CLOSEPOLY
-            path = cls(verts, codes, readonly=True)
+            path = cls(verts, closed=True, readonly=True)
             if numVertices <= 16:
                 cls._unit_regular_polygons[numVertices] = path
         return path
@@ -688,12 +685,8 @@ class Path:
             theta += np.pi / 2.0
             r = np.ones(ns2 + 1)
             r[1::2] = innerCircle
-            verts = np.vstack((r*np.cos(theta), r*np.sin(theta))).transpose()
-            codes = np.empty((ns2 + 1,))
-            codes[0] = cls.MOVETO
-            codes[1:-1] = cls.LINETO
-            codes[-1] = cls.CLOSEPOLY
-            path = cls(verts, codes, readonly=True)
+            verts = (r * np.vstack((np.cos(theta), np.sin(theta)))).T
+            path = cls(verts, closed=True, readonly=True)
             if numVertices <= 16:
                 cls._unit_regular_stars[(numVertices, innerCircle)] = path
         return path
@@ -727,10 +720,10 @@ class Path:
 
         Parameters
         ----------
-        center : pair of floats
-            The center of the circle. Default ``(0, 0)``.
-        radius : float
-            The radius of the circle. Default is 1.
+        center : (float, float), default: (0, 0)
+            The center of the circle.
+        radius : float, default: 1
+            The radius of the circle.
         readonly : bool
             Whether the created path should have the "readonly" argument
             set when creating the Path instance.
@@ -969,7 +962,7 @@ def get_path_collection_extents(
     master_transform : `~.Transform`
         Global transformation applied to all paths.
     paths : list of `Path`
-    transform : list of `~.Affine2D`
+    transforms : list of `~.Affine2D`
     offsets : (N, 2) array-like
     offset_transform : `~.Affine2D`
         Transform applied to the offsets before offsetting the path.
@@ -989,23 +982,3 @@ def get_path_collection_extents(
     return Bbox.from_extents(*_path.get_path_collection_extents(
         master_transform, paths, np.atleast_3d(transforms),
         offsets, offset_transform))
-
-
-@cbook.deprecated("3.1", alternative="get_paths_collection_extents")
-def get_paths_extents(paths, transforms=[]):
-    """
-    Given a sequence of :class:`Path` objects and optional
-    :class:`~matplotlib.transforms.Transform` objects, returns the
-    bounding box that encapsulates all of them.
-
-    *paths* is a sequence of :class:`Path` instances.
-
-    *transforms* is an optional sequence of
-    :class:`~matplotlib.transforms.Affine2D` instances to apply to
-    each path.
-    """
-    from .transforms import Bbox, Affine2D
-    if len(paths) == 0:
-        raise ValueError("No paths provided")
-    return Bbox.from_extents(*_path.get_path_collection_extents(
-        Affine2D(), paths, transforms, [], Affine2D()))

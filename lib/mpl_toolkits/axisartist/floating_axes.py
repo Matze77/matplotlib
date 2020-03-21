@@ -11,7 +11,6 @@ import numpy as np
 
 import matplotlib.patches as mpatches
 from matplotlib.path import Path
-from matplotlib.transforms import IdentityTransform
 import matplotlib.axes as maxes
 
 from mpl_toolkits.axes_grid1.parasite_axes import host_axes_class_factory
@@ -237,9 +236,9 @@ class GridHelperCurveLinear(grid_helper_curvelinear.GridHelperCurveLinear):
         lon_min, lon_max = sorted(extremes[:2])
         lat_min, lat_max = sorted(extremes[2:])
         lon_levs, lon_n, lon_factor = \
-                  grid_finder.grid_locator1(lon_min, lon_max)
+            grid_finder.grid_locator1(lon_min, lon_max)
         lat_levs, lat_n, lat_factor = \
-                  grid_finder.grid_locator2(lat_min, lat_max)
+            grid_finder.grid_locator2(lat_min, lat_max)
         grid_info["extremes"] = lon_min, lon_max, lat_min, lat_max  # extremes
 
         grid_info["lon_info"] = lon_levs, lon_n, lon_factor

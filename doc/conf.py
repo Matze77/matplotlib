@@ -19,9 +19,6 @@ import sphinx
 
 from datetime import datetime
 
-if sys.version_info < (3, 0, 0):
-    print("You're using python 2.x, conf.py works with python3+ only.")
-    exit()
 # If your extensions are in another directory, add it here. If the directory
 # is relative to the documentation root, use os.path.abspath to make it
 # absolute, like shown here.
@@ -112,12 +109,13 @@ missing_references_warn_unused_ignores = False
 
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
-    'numpy': ('https://docs.scipy.org/doc/numpy/', None),
-    'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
-    'pandas': ('https://pandas.pydata.org/pandas-docs/stable/', None),
-    'Pillow': ('https://pillow.readthedocs.io/en/stable/', None),
     'cycler': ('https://matplotlib.org/cycler', None),
     'dateutil': ('https://dateutil.readthedocs.io/en/stable/', None),
+    'numpy': ('https://docs.scipy.org/doc/numpy/', None),
+    'pandas': ('https://pandas.pydata.org/pandas-docs/stable/', None),
+    'Pillow': ('https://pillow.readthedocs.io/en/stable/', None),
+    'pytest': ('https://pytest.org/en/stable', None),
+    'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
 }
 
 
@@ -135,6 +133,7 @@ sphinx_gallery_conf = {
     'backreferences_dir': 'api/_as_gen',
     'subsection_order': gallery_order.sectionorder,
     'within_subsection_order': gallery_order.subsectionorder,
+    'remove_config_comments': True,
     'min_reported_time': 1,
 }
 
@@ -229,7 +228,7 @@ github_project_url = "https://github.com/matplotlib/matplotlib/"
 # must exist either in Sphinx' static/ path, or in one of the custom paths
 # given in html_static_path.
 #html_style = 'matplotlib.css'
-html_style = 'mpl.css'
+html_style = f'mpl.css?{SHA}'
 
 # The name for this set of Sphinx documents.  If None, it defaults to
 # "<project> v<release> documentation".
@@ -260,10 +259,9 @@ html_index = 'index.html'
 
 # Custom sidebar templates, maps page names to templates.
 html_sidebars = {
-    'index': ['searchbox.html', 'sidebar_announcement.html',
+    'index': ['sidebar_announcement.html', 'sidebar_versions.html',
               'donate_sidebar.html'],
-    '**': ['searchbox.html', 'localtoc.html', 'relations.html',
-           'pagesource.html']
+    '**': ['localtoc.html', 'relations.html', 'pagesource.html']
 }
 
 # If false, no module index is generated.
@@ -297,8 +295,8 @@ latex_paper_size = 'letter'
 
 latex_documents = [
     ('contents', 'Matplotlib.tex', 'Matplotlib',
-     'John Hunter, Darren Dale, Eric Firing, Michael Droettboom and the '
-     'matplotlib development team', 'manual'),
+     'John Hunter\\and Darren Dale\\and Eric Firing\\and Michael Droettboom'
+     '\\and and the matplotlib development team', 'manual'),
 ]
 
 
@@ -309,6 +307,9 @@ latex_logo = None
 latex_elements = {}
 # Additional stuff for the LaTeX preamble.
 latex_elements['preamble'] = r"""
+   % One line per author on title page
+   \DeclareRobustCommand{\and}%
+     {\end{tabular}\kern-\tabcolsep\\\begin{tabular}[t]{c}}%
    % In the parameters section, place a newline after the Parameters
    % header.  (This is stolen directly from Numpy's conf.py, since it
    % affects Numpy-style docstrings).
@@ -365,6 +366,11 @@ latex_elements = {
 }
 
 html4_writer = True
+
+inheritance_node_attrs = dict(fontsize=16)
+
+graphviz_dot = shutil.which('dot')
+graphviz_output_format = 'svg'
 
 
 def setup(app):

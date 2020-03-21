@@ -96,10 +96,12 @@ class SubplotBase:
                                                 return_all=True)
 
     @cbook.deprecated("3.2", alternative="ax.get_subplotspec().rowspan.start")
+    @property
     def rowNum(self):
         return self.get_subplotspec().rowspan.start
 
     @cbook.deprecated("3.2", alternative="ax.get_subplotspec().colspan.start")
+    @property
     def colNum(self):
         return self.get_subplotspec().colspan.start
 
@@ -184,6 +186,9 @@ def subplot_class_factory(axes_class=None):
     not have to be created for every type of Axes.
     """
     if axes_class is None:
+        cbook.warn_deprecated(
+            "3.3", message="Support for passing None to subplot_class_factory "
+            "is deprecated; explicitly pass the default Axes class instead.")
         axes_class = Axes
     try:
         # Avoid creating two different instances of GeoAxesSubplot...
@@ -197,8 +202,7 @@ def subplot_class_factory(axes_class=None):
                     {'_axes_class': axes_class})
 
 
-# This is provided for backward compatibility
-Subplot = subplot_class_factory()
+Subplot = subplot_class_factory(Axes)  # Provided for backward compatibility.
 
 
 def _picklable_subplot_class_constructor(axes_class):

@@ -1,6 +1,6 @@
 r"""
 :mod:`~matplotlib.gridspec` contains classes that help to layout multiple
-`~axes.Axes` in a grid-like pattern within a figure.
+`~.axes.Axes` in a grid-like pattern within a figure.
 
 The `GridSpec` specifies the overall grid structure. Individual cells within
 the grid are referenced by `SubplotSpec`\s.
@@ -224,8 +224,8 @@ class GridSpecBase:
         if isinstance(key, tuple):
             try:
                 k1, k2 = key
-            except ValueError:
-                raise ValueError("unrecognized subplot spec")
+            except ValueError as err:
+                raise ValueError("Unrecognized subplot spec") from err
             num1, num2 = np.ravel_multi_index(
                 [_normalize(k1, nrows, 0), _normalize(k2, ncols, 1)],
                 (nrows, ncols))
@@ -405,10 +405,10 @@ class GridSpec(GridSpecBase):
         h_pad, w_pad : float, optional
             Padding (height/width) between edges of adjacent subplots.
             Defaults to *pad*.
-        rect : tuple of 4 floats, optional
+        rect : tuple of 4 floats, default: (0, 0, 1, 1), i.e. the whole figure
             (left, bottom, right, top) rectangle in normalized figure
             coordinates that the whole subplots area (including labels) will
-            fit into.  Default is (0, 0, 1, 1).
+            fit into.
         """
 
         subplotspec_list = tight_layout.get_subplotspec_list(
@@ -522,6 +522,11 @@ class SubplotSpec:
         else:
             self._layoutbox = None
 
+    def __repr__(self):
+        return (f"{self.get_gridspec()}["
+                f"{self.rowspan.start}:{self.rowspan.stop}, "
+                f"{self.colspan.start}:{self.colspan.stop}]")
+
     @staticmethod
     def _from_subplot_args(figure, args):
         """
@@ -538,9 +543,9 @@ class SubplotSpec:
                 try:
                     s = str(int(arg))
                     rows, cols, num = map(int, s)
-                except ValueError:
+                except ValueError as err:
                     raise ValueError("Single argument to subplot must be a "
-                                     "3-digit integer")
+                                     "3-digit integer") from err
                 # num - 1 for converting from MATLAB to python indexing
                 return GridSpec(rows, cols, figure=figure)[num - 1]
         elif len(args) == 3:
@@ -561,7 +566,8 @@ class SubplotSpec:
                 # num - 1 for converting from MATLAB to python indexing
                 return GridSpec(rows, cols, figure=figure)[int(num) - 1]
         else:
-            raise ValueError(f"Illegal argument(s) to subplot: {args}")
+            raise TypeError(f"subplot() takes 1 or 3 positional arguments but "
+                            f"{len(args)} were given")
 
     # num2 is a property only to handle the case where it is None and someone
     # mutates num1.
@@ -686,7 +692,7 @@ class SubplotSpec:
 
         Returns
         -------
-        gridspec : `.GridSpecFromSubplotSpec`
+        `.GridSpecFromSubplotSpec`
 
         Other Parameters
         ----------------

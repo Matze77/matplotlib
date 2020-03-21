@@ -109,7 +109,7 @@ const char *PyFT2Image_as_str__doc__ =
 
 static PyObject *PyFT2Image_as_str(PyFT2Image *self, PyObject *args, PyObject *kwds)
 {
-    if (PyErr_WarnEx(PyExc_DeprecationWarning,
+    if (PyErr_WarnEx(PyExc_FutureWarning,
                      "FT2Image.as_str is deprecated since Matplotlib 3.2 and "
                      "will be removed in Matplotlib 3.4; convert the FT2Image "
                      "to a NumPy array with np.asarray instead.",
@@ -129,7 +129,7 @@ const char *PyFT2Image_as_rgba_str__doc__ =
 
 static PyObject *PyFT2Image_as_rgba_str(PyFT2Image *self, PyObject *args, PyObject *kwds)
 {
-    if (PyErr_WarnEx(PyExc_DeprecationWarning,
+    if (PyErr_WarnEx(PyExc_FutureWarning,
                      "FT2Image.as_rgba_str is deprecated since Matplotlib 3.2 and "
                      "will be removed in Matplotlib 3.4; convert the FT2Image "
                      "to a NumPy array with np.asarray instead.",
@@ -162,7 +162,7 @@ const char *PyFT2Image_as_array__doc__ =
 
 static PyObject *PyFT2Image_as_array(PyFT2Image *self, PyObject *args, PyObject *kwds)
 {
-    if (PyErr_WarnEx(PyExc_DeprecationWarning,
+    if (PyErr_WarnEx(PyExc_FutureWarning,
                      "FT2Image.as_array is deprecated since Matplotlib 3.2 and "
                      "will be removed in Matplotlib 3.4; convert the FT2Image "
                      "to a NumPy array with np.asarray instead.",
@@ -175,7 +175,7 @@ static PyObject *PyFT2Image_as_array(PyFT2Image *self, PyObject *args, PyObject 
 
 static PyObject *PyFT2Image_get_width(PyFT2Image *self, PyObject *args, PyObject *kwds)
 {
-    if (PyErr_WarnEx(PyExc_DeprecationWarning,
+    if (PyErr_WarnEx(PyExc_FutureWarning,
                      "FT2Image.get_width is deprecated since Matplotlib 3.2 and "
                      "will be removed in Matplotlib 3.4; convert the FT2Image "
                      "to a NumPy array with np.asarray instead.",
@@ -187,7 +187,7 @@ static PyObject *PyFT2Image_get_width(PyFT2Image *self, PyObject *args, PyObject
 
 static PyObject *PyFT2Image_get_height(PyFT2Image *self, PyObject *args, PyObject *kwds)
 {
-    if (PyErr_WarnEx(PyExc_DeprecationWarning,
+    if (PyErr_WarnEx(PyExc_FutureWarning,
                      "FT2Image.get_height is deprecated since Matplotlib 3.2 and "
                      "will be removed in Matplotlib 3.4; convert the FT2Image "
                      "to a NumPy array with np.asarray instead.",
@@ -569,7 +569,7 @@ static int PyFT2Font_init(PyFT2Font *self, PyObject *args, PyObject *kwds)
     CALL_CPP_FULL(
         "FT2Font", (self->x = new FT2Font(open_args, hinting_factor)), PyFT2Font_fail(self), -1);
 
-    CALL_CPP("FT2Font->set_kerning_factor", (self->x->set_kerning_factor(kerning_factor)));
+    CALL_CPP_INIT("FT2Font->set_kerning_factor", (self->x->set_kerning_factor(kerning_factor)));
 
     Py_INCREF(fname);
     self->fname = fname;
@@ -717,7 +717,7 @@ static PyObject *PyFT2Font_set_text(PyFT2Font *self, PyObject *args, PyObject *k
             codepoints[i] = bytestr[i];
         }
     } else {
-        PyErr_SetString(PyExc_TypeError, "String must be unicode or bytes");
+        PyErr_SetString(PyExc_TypeError, "String must be str or bytes");
         return NULL;
     }
 
@@ -975,44 +975,24 @@ const char *PyFT2Font_get_charmap__doc__ =
 static PyObject *PyFT2Font_get_charmap(PyFT2Font *self, PyObject *args, PyObject *kwds)
 {
     PyObject *charmap;
-
-    charmap = PyDict_New();
-    if (charmap == NULL) {
+    if (!(charmap = PyDict_New())) {
         return NULL;
     }
-
     FT_UInt index;
     FT_ULong code = FT_Get_First_Char(self->x->get_face(), &index);
     while (index != 0) {
-        PyObject *key;
-        PyObject *val;
-
-        key = PyLong_FromLong(code);
-        if (key == NULL) {
+        PyObject *key = NULL, *val = NULL;
+        bool error = (!(key = PyLong_FromLong(code))
+                      || !(val = PyLong_FromLong(index))
+                      || (PyDict_SetItem(charmap, key, val) == -1));
+        Py_XDECREF(key);
+        Py_XDECREF(val);
+        if (error) {
             Py_DECREF(charmap);
             return NULL;
         }
-
-        val = PyLong_FromLong(index);
-        if (val == NULL) {
-            Py_DECREF(key);
-            Py_DECREF(charmap);
-            return NULL;
-        }
-
-        if (PyDict_SetItem(charmap, key, val)) {
-            Py_DECREF(key);
-            Py_DECREF(val);
-            Py_DECREF(charmap);
-            return NULL;
-        }
-
-        Py_DECREF(key);
-        Py_DECREF(val);
-
         code = FT_Get_Next_Char(self->x->get_face(), code, &index);
     }
-
     return charmap;
 }
 
@@ -1708,8 +1688,6 @@ static PyTypeObject *PyFT2Font_init_type(PyObject *m, PyTypeObject *type)
     return type;
 }
 
-extern "C" {
-
 static struct PyModuleDef moduledef = {
     PyModuleDef_HEAD_INIT,
     "ft2font",
@@ -1812,5 +1790,3 @@ PyMODINIT_FUNC PyInit_ft2font(void)
 
     return m;
 }
-
-} // extern "C"

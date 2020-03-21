@@ -17,102 +17,69 @@ at your terminal, followed by::
 
 at the ipython shell prompt.
 
-For the most part, direct use of the object-oriented library is
-encouraged when programming; pyplot is primarily for working
-interactively.  The
-exceptions are the pyplot commands :func:`~matplotlib.pyplot.figure`,
-:func:`~matplotlib.pyplot.subplot`,
-:func:`~matplotlib.pyplot.subplots`, and
-:func:`~pyplot.savefig`, which can greatly simplify scripting.
+For the most part, direct use of the object-oriented library is encouraged when
+programming; pyplot is primarily for working interactively.  The exceptions are
+the pyplot functions `.pyplot.figure`, `.pyplot.subplot`, `.pyplot.subplots`,
+and `.pyplot.savefig`, which can greatly simplify scripting.
 
 Modules include:
 
     :mod:`matplotlib.axes`
-        defines the :class:`~matplotlib.axes.Axes` class.  Most pyplot
-        commands are wrappers for :class:`~matplotlib.axes.Axes`
-        methods.  The axes module is the highest level of OO access to
-        the library.
+        The `~.axes.Axes` class.  Most pyplot functions are wrappers for
+        `~.axes.Axes` methods.  The axes module is the highest level of OO
+        access to the library.
 
     :mod:`matplotlib.figure`
-        defines the :class:`~matplotlib.figure.Figure` class.
+        The `.Figure` class.
 
     :mod:`matplotlib.artist`
-        defines the :class:`~matplotlib.artist.Artist` base class for
-        all classes that draw things.
+        The `.Artist` base class for all classes that draw things.
 
     :mod:`matplotlib.lines`
-        defines the :class:`~matplotlib.lines.Line2D` class for
-        drawing lines and markers
+        The `.Line2D` class for drawing lines and markers.
 
     :mod:`matplotlib.patches`
-        defines classes for drawing polygons
+        Classes for drawing polygons.
 
     :mod:`matplotlib.text`
-        defines the :class:`~matplotlib.text.Text`,
-        :class:`~matplotlib.text.TextWithDash`, and
-        :class:`~matplotlib.text.Annotate` classes
+        The `.Text` and `.Annotation` classes.
 
     :mod:`matplotlib.image`
-        defines the :class:`~matplotlib.image.AxesImage` and
-        :class:`~matplotlib.image.FigureImage` classes
+        The `.AxesImage` and `.FigureImage` classes.
 
     :mod:`matplotlib.collections`
-        classes for efficient drawing of groups of lines or polygons
+        Classes for efficient drawing of groups of lines or polygons.
 
     :mod:`matplotlib.colors`
-        classes for interpreting color specifications and for making
-        colormaps
+        Color specifications and making colormaps.
 
     :mod:`matplotlib.cm`
-        colormaps and the :class:`~matplotlib.image.ScalarMappable`
-        mixin class for providing color mapping functionality to other
-        classes
+        Colormaps, and the `.ScalarMappable` mixin class for providing color
+        mapping functionality to other classes.
 
     :mod:`matplotlib.ticker`
-        classes for calculating tick mark locations and for formatting
-        tick labels
+        Calculation of tick mark locations and formatting of tick labels.
 
     :mod:`matplotlib.backends`
-        a subpackage with modules for various gui libraries and output
-        formats
+        A subpackage with modules for various GUI libraries and output formats.
 
 The base matplotlib namespace includes:
 
-    :data:`~matplotlib.rcParams`
-        a global dictionary of default configuration settings.  It is
-        initialized by code which may be overridden by a matplotlibrc
-        file.
+    `~matplotlib.rcParams`
+        Default configuration settings; their defaults may be overridden using
+        a :file:`matplotlibrc` file.
 
-    :func:`~matplotlib.rc`
-        a function for setting groups of rcParams values
+    `~matplotlib.use`
+        Setting the Matplotlib backend.  This should be called before any
+        figure is created, because it is not possible to switch between
+        different GUI backends after that.
 
-    :func:`~matplotlib.use`
-        a function for setting the matplotlib backend.  If used, this
-        function must be called immediately after importing matplotlib
-        for the first time.  In particular, it must be called
-        **before** importing pyplot (if pyplot is imported).
-
-matplotlib was initially written by John D. Hunter (1968-2012) and is now
+Matplotlib was initially written by John D. Hunter (1968-2012) and is now
 developed and maintained by a host of others.
 
 Occasionally the internal documentation (python docstrings) will refer
 to MATLAB&reg;, a registered trademark of The MathWorks, Inc.
-
 """
-# NOTE: This file must remain Python 2 compatible for the foreseeable future,
-# to ensure that we error out properly for existing editable installs.
-
-import sys
-if sys.version_info < (3, 5):  # noqa: E402
-    raise ImportError("""
-Matplotlib 3.0+ does not support Python 2.x, 3.0, 3.1, 3.2, 3.3, or 3.4.
-Beginning with Matplotlib 3.0, Python 3.5 and above is required.
-
-See Matplotlib `INSTALL.rst` file for more information:
-
-    https://github.com/matplotlib/matplotlib/blob/master/INSTALL.rst
-
-""")
 
 import atexit
 from collections import namedtuple
@@ -131,7 +98,9 @@ import pprint
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
+import warnings
 
 # cbook must import matplotlib only within function
 # definitions, so it is safe to import from it here.
@@ -169,7 +138,7 @@ __bibtex__ = r"""@Article{Hunter:2007,
 
 @cbook.deprecated("3.2")
 def compare_versions(a, b):
-    "Return whether version *a* is greater than or equal to version *b*."
+    """Return whether version *a* is greater than or equal to version *b*."""
     if isinstance(a, bytes):
         cbook.warn_deprecated(
             "3.0", message="compare_versions arguments should be strs.")
@@ -194,7 +163,7 @@ def _check_versions():
             ("cycler", "0.10"),
             ("dateutil", "2.1"),
             ("kiwisolver", "1.0.1"),
-            ("numpy", "1.11"),
+            ("numpy", "1.15"),
             ("pyparsing", "2.0.1"),
     ]:
         module = importlib.import_module(modname)
@@ -204,10 +173,6 @@ def _check_versions():
 
 
 _check_versions()
-
-
-if not hasattr(sys, 'argv'):  # for modpython
-    sys.argv = ['modpython']
 
 
 # The decorator ensures this always returns the same handler (and it is only
@@ -269,10 +234,10 @@ def _logged_cached(fmt, func=None):
     ret = None
 
     @functools.wraps(func)
-    def wrapper():
+    def wrapper(**kwargs):
         nonlocal called, ret
         if not called:
-            ret = func()
+            ret = func(**kwargs)
             called = True
             _log.debug(fmt, ret)
         return ret
@@ -337,15 +302,15 @@ def _get_executable_info(name):
                 output = _cpe.output
             else:
                 raise ExecutableNotFoundError(str(_cpe)) from _cpe
-        except FileNotFoundError as _fnf:
-            raise ExecutableNotFoundError(str(_fnf)) from _fnf
+        except OSError as _ose:
+            raise ExecutableNotFoundError(str(_ose)) from _ose
         match = re.search(regex, output)
         if match:
             version = LooseVersion(match.group(1))
             if min_ver is not None and version < min_ver:
                 raise ExecutableNotFoundError(
                     f"You have {args[0]} version {version} but the minimum "
-                    f"version supported by Matplotlib is {min_ver}.")
+                    f"version supported by Matplotlib is {min_ver}")
             return _ExecInfo(args[0], version)
         else:
             raise ExecutableNotFoundError(
@@ -366,7 +331,12 @@ def _get_executable_info(name):
         message = "Failed to find a Ghostscript installation"
         raise ExecutableNotFoundError(message)
     elif name == "inkscape":
-        return impl(["inkscape", "-V"], "^Inkscape ([^ ]*)")
+        info = impl(["inkscape", "-V"], "^Inkscape ([^ ]*)")
+        if info and info.version >= "1.0":
+            raise ExecutableNotFoundError(
+                f"You have Inkscape version {info.version} but Matplotlib "
+                f"only supports Inkscape<1.0")
+        return info
     elif name == "magick":
         path = None
         if sys.platform == "win32":
@@ -403,85 +373,10 @@ def _get_executable_info(name):
                          or "0.9" <= info.version <= "1.0"):
             raise ExecutableNotFoundError(
                 f"You have pdftops version {info.version} but the minimum "
-                f"version supported by Matplotlib is 3.0.")
+                f"version supported by Matplotlib is 3.0")
         return info
     else:
         raise ValueError("Unknown executable: {!r}".format(name))
-
-
-@cbook.deprecated("3.1")
-def checkdep_dvipng():
-    try:
-        s = subprocess.Popen(['dvipng', '-version'],
-                             stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        stdout, stderr = s.communicate()
-        line = stdout.decode('ascii').split('\n')[1]
-        v = line.split()[-1]
-        return v
-    except (IndexError, ValueError, OSError):
-        return None
-
-
-@cbook.deprecated("3.1")
-def checkdep_ghostscript():
-    if checkdep_ghostscript.executable is None:
-        if sys.platform == 'win32':
-            # mgs is the name in miktex
-            gs_execs = ['gswin32c', 'gswin64c', 'mgs', 'gs']
-        else:
-            gs_execs = ['gs']
-        for gs_exec in gs_execs:
-            try:
-                s = subprocess.Popen(
-                    [gs_exec, '--version'], stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE)
-                stdout, stderr = s.communicate()
-                if s.returncode == 0:
-                    v = stdout[:-1].decode('ascii')
-                    if compare_versions(v, '9.0'):
-                        checkdep_ghostscript.executable = gs_exec
-                        checkdep_ghostscript.version = v
-            except (IndexError, ValueError, OSError):
-                pass
-    return checkdep_ghostscript.executable, checkdep_ghostscript.version
-checkdep_ghostscript.executable = None
-checkdep_ghostscript.version = None
-
-
-@cbook.deprecated("3.1")
-def checkdep_pdftops():
-    try:
-        s = subprocess.Popen(['pdftops', '-v'], stdout=subprocess.PIPE,
-                             stderr=subprocess.PIPE)
-        stdout, stderr = s.communicate()
-        lines = stderr.decode('ascii').split('\n')
-        for line in lines:
-            if 'version' in line:
-                v = line.split()[-1]
-        return v
-    except (IndexError, ValueError, UnboundLocalError, OSError):
-        return None
-
-
-@cbook.deprecated("3.1")
-def checkdep_inkscape():
-    if checkdep_inkscape.version is None:
-        try:
-            s = subprocess.Popen(['inkscape', '-V'],
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE)
-            stdout, stderr = s.communicate()
-            lines = stdout.decode('ascii').split('\n')
-            for line in lines:
-                if 'Inkscape' in line:
-                    v = line.split()[1]
-                    break
-            checkdep_inkscape.version = v
-        except (IndexError, ValueError, UnboundLocalError, OSError):
-            pass
-    return checkdep_inkscape.version
-checkdep_inkscape.version = None
 
 
 @cbook.deprecated("3.2")
@@ -586,19 +481,18 @@ def _get_config_or_cache_dir(xdg_base):
 @_logged_cached('CONFIGDIR=%s')
 def get_configdir():
     """
-    Return the string representing the configuration directory.
+    Return the string path of the the configuration directory.
 
     The directory is chosen as follows:
 
     1. If the MPLCONFIGDIR environment variable is supplied, choose that.
-    2a. On Linux, follow the XDG specification and look first in
-        `$XDG_CONFIG_HOME`, if defined, or `$HOME/.config`.
-    2b. On other platforms, choose `$HOME/.matplotlib`.
+    2. On Linux, follow the XDG specification and look first in
+       ``$XDG_CONFIG_HOME``, if defined, or ``$HOME/.config``.  On other
+       platforms, choose ``$HOME/.matplotlib``.
     3. If the chosen directory exists and is writable, use that as the
        configuration directory.
-    4. If possible, create a temporary directory, and use it as the
-       configuration directory.
-    5. A writable directory could not be found or created; return None.
+    4. Else, create a temporary directory, and use it as the configuration
+       directory.
     """
     return _get_config_or_cache_dir(_get_xdg_config_dir())
 
@@ -606,28 +500,41 @@ def get_configdir():
 @_logged_cached('CACHEDIR=%s')
 def get_cachedir():
     """
-    Return the location of the cache directory.
+    Return the string path of the cache directory.
 
     The procedure used to find the directory is the same as for
-    _get_config_dir, except using `$XDG_CACHE_HOME`/`~/.cache` instead.
+    _get_config_dir, except using ``$XDG_CACHE_HOME``/``$HOME/.cache`` instead.
     """
     return _get_config_or_cache_dir(_get_xdg_cache_dir())
 
 
-def _get_data_path():
-    """Return the path to matplotlib data."""
-
-    if 'MATPLOTLIBDATA' in os.environ:
-        path = os.environ['MATPLOTLIBDATA']
-        if not os.path.isdir(path):
-            raise RuntimeError('Path in environment MATPLOTLIBDATA not a '
-                               'directory')
+@_logged_cached('matplotlib data path: %s')
+def get_data_path(*, _from_rc=None):
+    """Return the path to Matplotlib data."""
+    if _from_rc is not None:
         cbook.warn_deprecated(
-            "3.1", name="MATPLOTLIBDATA", obj_type="environment variable")
-        return path
+            "3.2",
+            message=("Setting the datapath via matplotlibrc is deprecated "
+                     "%(since)s and will be removed in %(removal)s."),
+            removal='3.3')
+        path = Path(_from_rc)
+        if path.is_dir():
+            defaultParams['datapath'][0] = str(path)
+            return str(path)
+        else:
+            warnings.warn(f"You passed datapath: {_from_rc!r} in your "
+                          f"matplotribrc file ({matplotlib_fname()}). "
+                          "However this path does not exist, falling back "
+                          "to standard paths.")
 
+    return _get_data_path()
+
+
+@_logged_cached('(private) matplotlib data path: %s')
+def _get_data_path():
     path = Path(__file__).with_name("mpl-data")
     if path.is_dir():
+        defaultParams['datapath'][0] = str(path)
         return str(path)
 
     cbook.warn_deprecated(
@@ -650,26 +557,10 @@ def _get_data_path():
 
     for path in get_candidate_paths():
         if path.is_dir():
+            defaultParams['datapath'][0] = str(path)
             return str(path)
 
     raise RuntimeError('Could not find the matplotlib data files')
-
-
-@_logged_cached('matplotlib data path: %s')
-def get_data_path():
-    if defaultParams['datapath'][0] is None:
-        defaultParams['datapath'][0] = _get_data_path()
-    return defaultParams['datapath'][0]
-
-
-@cbook.deprecated("3.1")
-def get_py2exe_datafiles():
-    data_path = Path(get_data_path())
-    d = {}
-    for path in filter(Path.is_file, data_path.glob("**/*")):
-        (d.setdefault(str(path.parent.relative_to(data_path.parent)), [])
-         .append(str(path)))
-    return list(d.items())
 
 
 def matplotlib_fname():
@@ -703,7 +594,7 @@ def matplotlib_fname():
             yield matplotlibrc
             yield os.path.join(matplotlibrc, 'matplotlibrc')
         yield os.path.join(get_configdir(), 'matplotlibrc')
-        yield os.path.join(get_data_path(), 'matplotlibrc')
+        yield os.path.join(_get_data_path(), 'matplotlibrc')
 
     for fname in gen_candidates():
         if os.path.exists(fname) and not os.path.isdir(fname):
@@ -720,17 +611,18 @@ _deprecated_map = {}
 # rcParams deprecated; some can manually be mapped to another key.
 # Values are tuples of (version, new_name_or_None).
 _deprecated_ignore_map = {
-    'pgf.debug': ('3.0', None),
 }
 
 # rcParams deprecated; can use None to suppress warnings; remain actually
 # listed in the rcParams (not included in _all_deprecated).
 # Values are tuples of (version,)
 _deprecated_remain_as_none = {
-    'text.latex.unicode': ('3.0',),
-    'savefig.frameon': ('3.1',),
-    'verbose.fileo': ('3.1',),
-    'verbose.level': ('3.1',),
+    'datapath': ('3.2.1',),
+    'animation.avconv_path': ('3.3',),
+    'animation.avconv_args': ('3.3',),
+    'mathtext.fallback_to_cm': ('3.3',),
+    'keymap.all_axes': ('3.3',),
+    'savefig.jpeg_quality': ('3.3',),
 }
 
 
@@ -781,12 +673,12 @@ class RcParams(MutableMapping, dict):
             try:
                 cval = self.validate[key](val)
             except ValueError as ve:
-                raise ValueError("Key %s: %s" % (key, str(ve)))
+                raise ValueError(f"Key {key}: {ve}") from None
             dict.__setitem__(self, key, cval)
-        except KeyError:
+        except KeyError as err:
             raise KeyError(
                 f"{key} is not a valid rc parameter (see rcParams.keys() for "
-                f"a list of valid parameters)")
+                f"a list of valid parameters)") from err
 
     def __getitem__(self, key):
         if key in _deprecated_map:
@@ -968,8 +860,11 @@ def rc_params_from_file(fname, fail_on_error=False, use_default_template=True):
                            if key not in _all_deprecated])
     config.update(config_from_file)
 
-    if config['datapath'] is None:
-        config['datapath'] = get_data_path()
+    with cbook._suppress_matplotlib_deprecation_warning():
+        if config['datapath'] is None:
+            config['datapath'] = _get_data_path()
+        else:
+            config['datapath'] = get_data_path(_from_rc=config['datapath'])
 
     if "".join(config['text.latex.preamble']):
         _log.info("""
@@ -1000,7 +895,7 @@ if rcParams['axes.formatter.use_locale']:
 
 def rc(group, **kwargs):
     """
-    Set the current rc params.  *group* is the grouping for the rc, e.g.,
+    Set the current `.rcParams`.  *group* is the grouping for the rc, e.g.,
     for ``lines.linewidth`` the group is ``lines``, for
     ``axes.facecolor``, the group is ``axes``, and so on.  Group may
     also be a list or tuple of group names, e.g., (*xtick*, *ytick*).
@@ -1008,7 +903,7 @@ def rc(group, **kwargs):
 
       rc('lines', linewidth=2, color='r')
 
-    sets the current rc params and is equivalent to::
+    sets the current `.rcParams` and is equivalent to::
 
       rcParams['lines.linewidth'] = 2
       rcParams['lines.color'] = 'r'
@@ -1027,7 +922,7 @@ def rc(group, **kwargs):
     'aa'    'antialiased'
     =====   =================
 
-    Thus you could abbreviate the above rc command as::
+    Thus you could abbreviate the above call as::
 
           rc('lines', lw=2, c='r')
 
@@ -1042,7 +937,7 @@ def rc(group, **kwargs):
 
     This enables you to easily switch between several configurations.  Use
     ``matplotlib.style.use('default')`` or :func:`~matplotlib.rcdefaults` to
-    restore the default rc params after changes.
+    restore the default `.rcParams` after changes.
 
     Notes
     -----
@@ -1069,23 +964,24 @@ def rc(group, **kwargs):
             key = '%s.%s' % (g, name)
             try:
                 rcParams[key] = v
-            except KeyError:
+            except KeyError as err:
                 raise KeyError(('Unrecognized key "%s" for group "%s" and '
-                                'name "%s"') % (key, g, name))
+                                'name "%s"') % (key, g, name)) from err
 
 
 def rcdefaults():
     """
-    Restore the rc params from Matplotlib's internal default style.
+    Restore the `.rcParams` from Matplotlib's internal default style.
 
-    Style-blacklisted rc params (defined in
+    Style-blacklisted `.rcParams` (defined in
     `matplotlib.style.core.STYLE_BLACKLIST`) are not updated.
 
     See Also
     --------
-    rc_file_defaults
-        Restore the rc params from the rc file originally loaded by Matplotlib.
-    matplotlib.style.use :
+    matplotlib.rc_file_defaults
+        Restore the `.rcParams` from the rc file originally loaded by
+        Matplotlib.
+    matplotlib.style.use
         Use a specific style file.  Call ``style.use('default')`` to restore
         the default style.
     """
@@ -1100,9 +996,9 @@ def rcdefaults():
 
 def rc_file_defaults():
     """
-    Restore the rc params from the original rc file loaded by Matplotlib.
+    Restore the `.rcParams` from the original rc file loaded by Matplotlib.
 
-    Style-blacklisted rc params (defined in
+    Style-blacklisted `.rcParams` (defined in
     `matplotlib.style.core.STYLE_BLACKLIST`) are not updated.
     """
     # Deprecation warnings were already handled when creating rcParamsOrig, no
@@ -1115,9 +1011,9 @@ def rc_file_defaults():
 
 def rc_file(fname, *, use_default_template=True):
     """
-    Update rc params from file.
+    Update `.rcParams` from file.
 
-    Style-blacklisted rc params (defined in
+    Style-blacklisted `.rcParams` (defined in
     `matplotlib.style.core.STYLE_BLACKLIST`) are not updated.
 
     Parameters
@@ -1202,9 +1098,7 @@ class rc_context:
         self.__fallback()
 
 
-@cbook._rename_parameter("3.1", "arg", "backend")
-@cbook._delete_parameter("3.1", "warn")
-def use(backend, warn=False, force=True):
+def use(backend, *, force=True):
     """
     Select the backend used for rendering and GUI integration.
 
@@ -1224,11 +1118,7 @@ def use(backend, warn=False, force=True):
 
         or a string of the form: ``module://my.module.name``.
 
-    warn : bool, optional, default: False
-        If True and not *force*, emit a warning if a failure-to-switch
-        `ImportError` has been suppressed.  This parameter is deprecated.
-
-    force : bool, optional, default: True
+    force : bool, default: True
         If True (the default), raise an `ImportError` if the backend cannot be
         set up (either because it fails to import, or because an incompatible
         GUI interactive framework is already running); if False, ignore the
@@ -1244,20 +1134,12 @@ def use(backend, warn=False, force=True):
         # Nothing to do if the requested backend is already set
         pass
     else:
-        # Update both rcParams and rcDefaults so restoring the defaults later
-        # with rcdefaults won't change the backend.  This is a bit of overkill
-        # as 'backend' is already in style.core.STYLE_BLACKLIST, but better to
-        # be safe.
-        rcParams['backend'] = rcParamsDefault['backend'] = name
         try:
             from matplotlib import pyplot as plt
             plt.switch_backend(name)
-        except ImportError as exc:
+        except ImportError:
             if force:
                 raise
-            if warn:
-                cbook._warn_external(
-                    f"Failed to switch backend to {backend}: {exc}")
 
 
 if os.environ.get('MPLBACKEND'):
@@ -1287,22 +1169,8 @@ def is_interactive():
     return rcParams['interactive']
 
 
-@cbook.deprecated("3.1", alternative="rcParams['tk.window_focus']")
-def tk_window_focus():
-    """
-    Return true if focus maintenance under TkAgg on win32 is on.
-
-    This currently works only for python.exe and IPython.exe.
-    Both IDLE and Pythonwin.exe fail badly when tk_window_focus is on.
-    """
-    if rcParams['backend'] != 'TkAgg':
-        return False
-    return rcParams['tk.window_focus']
-
-
 default_test_modules = [
     'matplotlib.tests',
-    'matplotlib.sphinxext.tests',
     'mpl_toolkits.tests',
 ]
 
@@ -1316,14 +1184,12 @@ def _init_tests():
     if (ft2font.__freetype_version__ != LOCAL_FREETYPE_VERSION or
         ft2font.__freetype_build_type__ != 'local'):
         _log.warning(
-            "Matplotlib is not built with the correct FreeType version to run "
-            "tests.  Set local_freetype=True in setup.cfg and rebuild. "
-            "Expect many image comparison failures below. "
-            "Expected freetype version {0}. "
-            "Found freetype version {1}. "
-            "Freetype build type is {2}local".format(
-                LOCAL_FREETYPE_VERSION,
-                ft2font.__freetype_version__,
+            f"Matplotlib is not built with the correct FreeType version to "
+            f"run tests.  Rebuild without setting system_freetype=1 in "
+            f"setup.cfg.  Expect many image comparison failures below.  "
+            f"Expected freetype version {LOCAL_FREETYPE_VERSION}.  "
+            f"Found freetype version {ft2font.__freetype_version__}.  "
+            "Freetype build type is {}local".format(
                 "" if ft2font.__freetype_build_type__ == 'local' else "not "))
 
     try:
@@ -1334,6 +1200,7 @@ def _init_tests():
 
 
 @cbook._delete_parameter("3.2", "switch_backend_warn")
+@cbook._delete_parameter("3.3", "recursionlimit")
 def test(verbosity=None, coverage=False, switch_backend_warn=True,
          recursionlimit=0, **kwargs):
     """Run the matplotlib test suite."""
@@ -1419,19 +1286,18 @@ Notes
 _DATA_DOC_APPENDIX = """
 
 .. note::
-    In addition to the above described arguments, this function can take a
-    **data** keyword argument. If such a **data** argument is given, the
-    following arguments are replaced by **data[<arg>]**:
+    In addition to the above described arguments, this function can take
+    a *data* keyword argument. If such a *data* argument is given,
+{replaced}
 
-    {replaced}
-
-    Objects passed as **data** must support item access (``data[<arg>]``) and
-    membership test (``<arg> in data``).
+    Objects passed as **data** must support item access (``data[s]``) and
+    membership test (``s in data``).
 """
 
 
 def _add_data_doc(docstring, replace_names):
-    """Add documentation for a *data* field to the given docstring.
+    """
+    Add documentation for a *data* field to the given docstring.
 
     Parameters
     ----------
@@ -1444,15 +1310,20 @@ def _add_data_doc(docstring, replace_names):
 
     Returns
     -------
+    str
         The augmented docstring.
     """
-    docstring = inspect.cleandoc(docstring) if docstring is not None else ""
-    repl = ("* All positional and all keyword arguments."
-            if replace_names is None else
-            ""
-            if len(replace_names) == 0 else
-            "* All arguments with the following names: {}.".format(
-                ", ".join(map(repr, sorted(replace_names)))))
+    if (docstring is None
+            or replace_names is not None and len(replace_names) == 0):
+        return docstring
+    docstring = inspect.cleandoc(docstring)
+    repl = (
+        ("    every other argument can also be string ``s``, which is\n"
+         "    interpreted as ``data[s]`` (unless this raises an exception).")
+        if replace_names is None else
+        ("    the following arguments can also be string ``s``, which is\n"
+         "    interpreted as ``data[s]`` (unless this raises an exception):\n"
+         "    " + ", ".join(map("*{}*".format, replace_names))) + ".")
     addendum = _DATA_DOC_APPENDIX.format(replaced=repl)
     if _DATA_DOC_TITLE not in docstring:
         addendum = _DATA_DOC_TITLE + addendum
@@ -1463,11 +1334,12 @@ def _preprocess_data(func=None, *, replace_names=None, label_namer=None):
     """
     A decorator to add a 'data' kwarg to a function.
 
-    ::
+    When applied::
+
         @_preprocess_data()
         def func(ax, *args, **kwargs): ...
 
-    is a function with signature ``decorated(ax, *args, data=None, **kwargs)``
+    the signature is modified to ``decorated(ax, *args, data=None, **kwargs)``
     with the following behavior:
 
     - if called with ``data=None``, forward the other arguments to ``func``;
@@ -1480,10 +1352,10 @@ def _preprocess_data(func=None, *, replace_names=None, label_namer=None):
 
     Parameters
     ----------
-    replace_names : list of str or None, optional, default: None
+    replace_names : list of str or None, default: None
         The list of parameter names for which lookup into *data* should be
         attempted. If None, replacement is attempted for all arguments.
-    label_namer : str, optional, default: None
+    label_namer : str, default: None
         If set e.g. to "namer" (which must be a kwarg in the function's
         signature -- not as ``**kwargs``), if the *namer* argument passed in is
         a (string) key of *data* and no *label* kwarg is passed, then use the
@@ -1522,15 +1394,12 @@ def _preprocess_data(func=None, *, replace_names=None, label_namer=None):
     new_sig = sig.replace(parameters=params)
     arg_names = arg_names[1:]  # remove the first "ax" / self arg
 
-    if replace_names is not None:
-        replace_names = set(replace_names)
-
-    assert (replace_names or set()) <= set(arg_names) or varkwargs_name, (
+    assert {*arg_names}.issuperset(replace_names or []) or varkwargs_name, (
         "Matplotlib internal error: invalid replace_names ({!r}) for {!r}"
         .format(replace_names, func.__name__))
     assert label_namer is None or label_namer in arg_names, (
         "Matplotlib internal error: invalid label_namer ({!r}) for {!r}"
-            .format(label_namer, func.__name__))
+        .format(label_namer, func.__name__))
 
     @functools.wraps(func)
     def inner(ax, *args, data=None, **kwargs):
@@ -1538,9 +1407,6 @@ def _preprocess_data(func=None, *, replace_names=None, label_namer=None):
             return func(ax, *map(sanitize_sequence, args), **kwargs)
 
         bound = new_sig.bind(ax, *args, **kwargs)
-        needs_label = (label_namer
-                       and "label" not in bound.arguments
-                       and "label" not in bound.kwargs)
         auto_label = (bound.arguments.get(label_namer)
                       or bound.kwargs.get(label_namer))
 
@@ -1556,24 +1422,15 @@ def _preprocess_data(func=None, *, replace_names=None, label_namer=None):
                 if replace_names is None or k in replace_names:
                     bound.arguments[k] = _replacer(data, v)
 
-        bound.apply_defaults()
-        del bound.arguments["data"]
+        new_args = bound.args
+        new_kwargs = bound.kwargs
 
-        if needs_label:
-            all_kwargs = {**bound.arguments, **bound.kwargs}
-            # label_namer will be in all_kwargs as we asserted above that
-            # `label_namer is None or label_namer in arg_names`.
-            label = _label_from_arg(all_kwargs[label_namer], auto_label)
-            if "label" in arg_names:
-                bound.arguments["label"] = label
-                try:
-                    bound.arguments.move_to_end(varkwargs_name)
-                except KeyError:
-                    pass
-            else:
-                bound.arguments.setdefault(varkwargs_name, {})["label"] = label
+        args_and_kwargs = {**bound.arguments, **bound.kwargs}
+        if label_namer and "label" not in args_and_kwargs:
+            new_kwargs["label"] = _label_from_arg(
+                args_and_kwargs.get(label_namer), auto_label)
 
-        return func(*bound.args, **bound.kwargs)
+        return func(*new_args, **new_kwargs)
 
     inner.__doc__ = _add_data_doc(inner.__doc__, replace_names)
     inner.__signature__ = new_sig

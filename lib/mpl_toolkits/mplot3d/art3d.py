@@ -28,24 +28,12 @@ def _norm_angle(a):
     return a
 
 
-@cbook.deprecated("3.1")
-def norm_angle(a):
-    """Return the given angle normalized to -180 < *a* <= 180 degrees."""
-    return _norm_angle(a)
-
-
 def _norm_text_angle(a):
     """Return the given angle normalized to -90 < *a* <= 90 degrees."""
     a = (a + 180) % 180
     if a > 90:
         a = a - 180
     return a
-
-
-@cbook.deprecated("3.1")
-def norm_text_angle(a):
-    """Return the given angle normalized to -90 < *a* <= 90 degrees."""
-    return _norm_text_angle(a)
 
 
 def get_dir_vector(zdir):
@@ -152,13 +140,7 @@ class Line3D(lines.Line2D):
     def set_3d_properties(self, zs=0, zdir='z'):
         xs = self.get_xdata()
         ys = self.get_ydata()
-
-        try:
-            # If *zs* is a list or array, then this will fail and
-            # just proceed to juggle_axes().
-            zs = np.full_like(xs, fill_value=float(zs))
-        except TypeError:
-            pass
+        zs = np.broadcast_to(zs, xs.shape)
         self._verts3d = juggle_axes(xs, ys, zs, zdir)
         self.stale = True
 
@@ -222,12 +204,6 @@ def _path_to_3d_segment(path, zs=0, zdir='z'):
     return seg3d
 
 
-@cbook.deprecated("3.1")
-def path_to_3d_segment(path, zs=0, zdir='z'):
-    """Convert a path to a 3D segment."""
-    return _path_to_3d_segment(path, zs=zs, zdir=zdir)
-
-
 def _paths_to_3d_segments(paths, zs=0, zdir='z'):
     """Convert paths from a collection object to 3D segments."""
 
@@ -235,12 +211,6 @@ def _paths_to_3d_segments(paths, zs=0, zdir='z'):
     segs = [_path_to_3d_segment(path, pathz, zdir)
             for path, pathz in zip(paths, zs)]
     return segs
-
-
-@cbook.deprecated("3.1")
-def paths_to_3d_segments(paths, zs=0, zdir='z'):
-    """Convert paths from a collection object to 3D segments."""
-    return _paths_to_3d_segments(paths, zs=zs, zdir=zdir)
 
 
 def _path_to_3d_segment_with_codes(path, zs=0, zdir='z'):
@@ -258,12 +228,6 @@ def _path_to_3d_segment_with_codes(path, zs=0, zdir='z'):
     return seg3d, list(codes)
 
 
-@cbook.deprecated("3.1")
-def path_to_3d_segment_with_codes(path, zs=0, zdir='z'):
-    """Convert a path to a 3D segment with path codes."""
-    return _path_to_3d_segment_with_codes(path, zs=zs, zdir=zdir)
-
-
 def _paths_to_3d_segments_with_codes(paths, zs=0, zdir='z'):
     """
     Convert paths from a collection object to 3D segments with path codes.
@@ -277,14 +241,6 @@ def _paths_to_3d_segments_with_codes(paths, zs=0, zdir='z'):
     else:
         segments, codes = [], []
     return list(segments), list(codes)
-
-
-@cbook.deprecated("3.1")
-def paths_to_3d_segments_with_codes(paths, zs=0, zdir='z'):
-    """
-    Convert paths from a collection object to 3D segments with path codes.
-    """
-    return _paths_to_3d_segments_with_codes(paths, zs=zs, zdir=zdir)
 
 
 class Line3DCollection(LineCollection):
@@ -397,12 +353,6 @@ def _get_patch_verts(patch):
         return polygons[0]
     else:
         return []
-
-
-@cbook.deprecated("3.1")
-def get_patch_verts(patch):
-    """Return a list of vertices for the path of a patch."""
-    return _get_patch_verts(patch)
 
 
 def patch_2d_to_3d(patch, z=0, zdir='z'):
@@ -580,17 +530,39 @@ def patch_collection_2d_to_3d(col, zs=0, zdir='z', depthshade=True):
 class Poly3DCollection(PolyCollection):
     """
     A collection of 3D polygons.
+
+    .. note::
+        **Filling of 3D polygons**
+
+        There is no simple definition of the enclosed surface of a 3D polygon
+        unless the polygon is planar.
+
+        In practice, Matplotlib performs the filling on the 2D projection of
+        the polygon. This gives a correct filling appearance only for planar
+        polygons. For all other polygons, you'll find orientations in which
+        the edges of the polygon intersect in the projection. This will lead
+        to an incorrect visualization of the 3D area.
+
+        If you need filled areas, it is recommended to create them via
+        `~mpl_toolkits.mplot3d.axes3d.Axes3D.plot_trisurf`, which creates a
+        triangulation and thus generates consistent surfaces.
     """
 
     def __init__(self, verts, *args, zsort='average', **kwargs):
         """
-        Create a Poly3DCollection.
+        Parameters
+        ----------
+        verts : list of array-like Nx3
+            Each element describes a polygon as a sequnce of ``N_i`` points
+            ``(x, y, z)``.
+        zsort : {'average', 'min', 'max'}, default: 'average'
+            The calculation method for the z-order.
+            See `~.Poly3DCollection.set_zsort` for details.
+        *args, **kwargs
+            All other parameters are forwarded to `.PolyCollection`.
 
-        *verts* should contain 3D coordinates.
-
-        Keyword arguments:
-        zsort, see set_zsort for options.
-
+        Notes
+        -----
         Note that this class does a bit of magic with the _facecolors
         and _edgecolors properties.
         """
@@ -806,12 +778,6 @@ def _get_colors(c, num):
         (num, 4))
 
 
-@cbook.deprecated("3.1")
-def get_colors(c, num):
-    """Stretch the color argument to provide the required number *num*."""
-    return _get_colors(c, num)
-
-
 def _zalpha(colors, zs):
     """Modify the alphas of the color list according to depth."""
     # FIXME: This only works well if the points for *zs* are well-spaced
@@ -824,9 +790,3 @@ def _zalpha(colors, zs):
     sats = 1 - norm(zs) * 0.7
     rgba = np.broadcast_to(mcolors.to_rgba_array(colors), (len(zs), 4))
     return np.column_stack([rgba[:, :3], rgba[:, 3] * sats])
-
-
-@cbook.deprecated("3.1")
-def zalpha(colors, zs):
-    """Modify the alphas of the color list according to depth."""
-    return _zalpha(colors, zs)

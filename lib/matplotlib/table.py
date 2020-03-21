@@ -342,7 +342,7 @@ class Table(Artist):
 
         Returns
         -------
-        cell : `.CustomCell`
+        `.CustomCell`
             The created cell.
 
         """
@@ -358,8 +358,9 @@ class Table(Artist):
         cbook._check_isinstance(CustomCell, cell=cell)
         try:
             row, col = position[0], position[1]
-        except Exception:
-            raise KeyError('Only tuples length 2 are accepted as coordinates')
+        except Exception as err:
+            raise KeyError('Only tuples length 2 are accepted as '
+                           'coordinates') from err
         cell.set_figure(self.figure)
         cell.set_transform(self.get_transform())
         cell.set_clip_on(False)
@@ -422,7 +423,7 @@ class Table(Artist):
 
     def _get_grid_bbox(self, renderer):
         """
-        Get a bbox, in axes co-ordinates for the cells.
+        Get a bbox, in axes coordinates for the cells.
 
         Only include those in the range (0, 0) to (maxRow, maxCol).
         """
@@ -701,7 +702,7 @@ def table(ax,
     rowColours : list of colors, optional
         The colors of the row header cells.
 
-    rowLoc : {'left', 'center', 'right'}, optional, default: 'left'
+    rowLoc : {'left', 'center', 'right'}, default: 'left'
         The text alignment of the row header cells.
 
     colLabels : list of str, optional
@@ -710,7 +711,7 @@ def table(ax,
     colColours : list of colors, optional
         The colors of the column header cells.
 
-    colLoc : {'left', 'center', 'right'}, optional, default: 'left'
+    colLoc : {'left', 'center', 'right'}, default: 'left'
         The text alignment of the column header cells.
 
     loc : str, optional
@@ -725,17 +726,17 @@ def table(ax,
         The cell edges to be drawn with a line. See also
         `~.CustomCell.visible_edges`.
 
+    Returns
+    -------
+    `~matplotlib.table.Table`
+        The created table.
+
     Other Parameters
     ----------------
     **kwargs
         `.Table` properties.
 
     %(Table)s
-
-    Returns
-    -------
-    table : `~matplotlib.table.Table`
-        The created table.
     """
 
     if cellColours is None and cellText is None:

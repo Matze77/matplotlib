@@ -22,6 +22,7 @@ import enum
 from functools import lru_cache, partial, wraps
 import logging
 import os
+from pathlib import Path
 import re
 import struct
 import textwrap
@@ -203,19 +204,14 @@ class Dvi:
 
     def _get_baseline(self, filename):
         if rcParams['text.latex.preview']:
-            base, ext = os.path.splitext(filename)
-            baseline_filename = base + ".baseline"
-            if os.path.exists(baseline_filename):
-                with open(baseline_filename, 'rb') as fd:
-                    l = fd.read().split()
-                height, depth, width = l
+            baseline = Path(filename).with_suffix(".baseline")
+            if baseline.exists():
+                height, depth, width = baseline.read_bytes().split()
                 return float(depth)
         return None
 
     def __enter__(self):
-        """
-        Context manager enter method, does nothing.
-        """
+        """Context manager enter method, does nothing."""
         return self
 
     def __exit__(self, etype, evalue, etrace):
@@ -244,9 +240,7 @@ class Dvi:
             yield self._output()
 
     def close(self):
-        """
-        Close the underlying file if it is open.
-        """
+        """Close the underlying file if it is open."""
         if not self.file.closed:
             self.file.close()
 
@@ -459,14 +453,14 @@ class Dvi:
         if i != 2:
             raise ValueError("Unknown dvi format %d" % i)
         if num != 25400000 or den != 7227 * 2**16:
-            raise ValueError("nonstandard units in dvi file")
+            raise ValueError("Nonstandard units in dvi file")
             # meaning: TeX always uses those exact values, so it
             # should be enough for us to support those
             # (There are 72.27 pt to an inch so 7227 pt =
             # 7227 * 2**16 sp to 100 in. The numerator is multiplied
             # by 10^5 to get units of 10**-7 meters.)
         if mag != 1000:
-            raise ValueError("nonstandard magnification in dvi file")
+            raise ValueError("Nonstandard magnification in dvi file")
             # meaning: LaTeX seems to frown on setting \mag, so
             # I think we can assume this is constant
         self.state = _dvistate.outer
@@ -483,7 +477,7 @@ class Dvi:
 
     @_dispatch(min=250, max=255)
     def _malformed(self, offset):
-        raise ValueError("unknown command: byte %d", 250 + offset)
+        raise ValueError(f"unknown command: byte {250 + offset}")
 
 
 class DviFont:
@@ -568,18 +562,18 @@ class DviFont:
                 result.append(0)
             else:
                 result.append(_mul2012(value, self._scale))
+        # cmsy10 glyph 0 ("minus") has a nonzero descent so that TeX aligns
+        # equations properly (https://tex.stackexchange.com/questions/526103/),
+        # but we actually care about the rasterization depth to align the
+        # dvipng-generated images.
+        if self.texname == b"cmsy10" and char == 0:
+            result[-1] = 0
         return result
 
 
 class Vf(Dvi):
     r"""
     A virtual font (\*.vf file) containing subroutines for dvi files.
-
-    Usage::
-
-      vf = Vf(filename)
-      glyph = vf[code]
-      glyph.text, glyph.boxes, glyph.width
 
     Parameters
     ----------
@@ -591,6 +585,14 @@ class Vf(Dvi):
     http://mirrors.ctan.org/info/knuth/virtual-fonts
     This class reuses some of the machinery of `Dvi`
     but replaces the `_read` loop and dispatch mechanism.
+
+    Examples
+    --------
+    ::
+
+        vf = Vf(filename)
+        glyph = vf[code]
+        glyph.text, glyph.boxes, glyph.width
     """
 
     def __init__(self, filename):
@@ -654,7 +656,7 @@ class Vf(Dvi):
             elif byte == 248:       # postamble (just some number of 248s)
                 break
             else:
-                raise ValueError("unknown vf opcode %d" % byte)
+                raise ValueError("Unknown vf opcode %d" % byte)
 
     def _init_packet(self, pl):
         if self.state != _dvistate.outer:
@@ -748,26 +750,12 @@ class Tfm:
             self.depth[char] = _fix2comp(depths[byte1 & 0xf])
 
 
-PsFont = namedtuple('Font', 'texname psname effects encoding filename')
+PsFont = namedtuple('PsFont', 'texname psname effects encoding filename')
 
 
 class PsfontsMap:
     """
     A psfonts.map formatted file, mapping TeX fonts to PS fonts.
-
-    Usage::
-
-     >>> map = PsfontsMap(find_tex_file('pdftex.map'))
-     >>> entry = map[b'ptmbo8r']
-     >>> entry.texname
-     b'ptmbo8r'
-     >>> entry.psname
-     b'Times-Bold'
-     >>> entry.encoding
-     '/usr/local/texlive/2008/texmf-dist/fonts/enc/dvips/base/8r.enc'
-     >>> entry.effects
-     {'slant': 0.16700000000000001}
-     >>> entry.filename
 
     Parameters
     ----------
@@ -794,6 +782,20 @@ class PsfontsMap:
     the Times-Bold example above), while the pdf-related files perhaps
     only avoid the "Base 14" pdf fonts. But the user may have
     configured these files differently.
+
+    Examples
+    --------
+    >>> map = PsfontsMap(find_tex_file('pdftex.map'))
+    >>> entry = map[b'ptmbo8r']
+    >>> entry.texname
+    b'ptmbo8r'
+    >>> entry.psname
+    b'Times-Bold'
+    >>> entry.encoding
+    '/usr/local/texlive/2008/texmf-dist/fonts/enc/dvips/base/8r.enc'
+    >>> entry.effects
+    {'slant': 0.16700000000000001}
+    >>> entry.filename
     """
     __slots__ = ('_font', '_filename')
 
@@ -917,6 +919,7 @@ class PsfontsMap:
                 encoding=encoding, filename=filename)
 
 
+@cbook.deprecated("3.3")
 class Encoding:
     r"""
     Parses a \*.enc file referenced from a psfonts.map style file.
@@ -982,12 +985,11 @@ def _parse_enc(path):
 
     Returns
     -------
-    encoding : list
+    list
         The nth entry of the list is the PostScript glyph name of the nth
         glyph.
     """
-    with open(path, encoding="ascii") as file:
-        no_comments = "\n".join(line.split("%")[0].rstrip() for line in file)
+    no_comments = re.sub("%.*", "", Path(path).read_text(encoding="ascii"))
     array = re.search(r"(?s)\[(.*)\]", no_comments).group(1)
     lines = [line for line in array.split() if line]
     if all(line.startswith("/") for line in lines):
@@ -1013,7 +1015,7 @@ def find_tex_file(filename, format=None):
     ----------
     filename : str or path-like
     format : str or bytes
-        Used as the value of the `--format` option to :program:`kpsewhich`.
+        Used as the value of the ``--format`` option to :program:`kpsewhich`.
         Could be e.g. 'tfm' or 'vf' to limit the search to that type of files.
 
     References

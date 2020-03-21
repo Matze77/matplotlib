@@ -1,3 +1,4 @@
+from datetime import datetime
 import io
 import warnings
 
@@ -6,10 +7,11 @@ from numpy.testing import assert_almost_equal
 import pytest
 
 import matplotlib
+import matplotlib as mpl
 from matplotlib.backend_bases import MouseEvent
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
-from matplotlib.testing.decorators import image_comparison
+from matplotlib.testing.decorators import check_figures_equal, image_comparison
 
 
 needs_usetex = pytest.mark.skipif(
@@ -151,28 +153,28 @@ def test_multiline2():
     horal = 'left'
     for nn, st in enumerate(sts):
         tt = ax.text(0.2 * nn + 0.1, 0.5, st, horizontalalignment=horal,
-            verticalalignment='bottom')
+                     verticalalignment='bottom')
         draw_box(ax, tt)
     ax.text(1.2, 0.5, 'Bottom align', color='C2')
 
     ax.axhline(1.3, color='C2', linewidth=0.3)
     for nn, st in enumerate(sts):
         tt = ax.text(0.2 * nn + 0.1, 1.3, st, horizontalalignment=horal,
-            verticalalignment='top')
+                     verticalalignment='top')
         draw_box(ax, tt)
     ax.text(1.2, 1.3, 'Top align', color='C2')
 
     ax.axhline(1.8, color='C2', linewidth=0.3)
     for nn, st in enumerate(sts):
         tt = ax.text(0.2 * nn + 0.1, 1.8, st, horizontalalignment=horal,
-            verticalalignment='baseline')
+                     verticalalignment='baseline')
         draw_box(ax, tt)
     ax.text(1.2, 1.8, 'Baseline align', color='C2')
 
     ax.axhline(0.1, color='C2', linewidth=0.3)
     for nn, st in enumerate(sts):
         tt = ax.text(0.2 * nn + 0.1, 0.1, st, horizontalalignment=horal,
-            verticalalignment='bottom', rotation=20)
+                     verticalalignment='bottom', rotation=20)
         draw_box(ax, tt)
     ax.text(1.2, 0.1, 'Bot align, rot20', color='C2')
 
@@ -193,12 +195,9 @@ def test_antialiasing():
 
 
 def test_afm_kerning():
-    from matplotlib.afm import AFM
-    from matplotlib.font_manager import findfont
-
-    fn = findfont("Helvetica", fontext="afm")
+    fn = mpl.font_manager.findfont("Helvetica", fontext="afm")
     with open(fn, 'rb') as fh:
-        afm = AFM(fh)
+        afm = mpl.afm.AFM(fh)
     assert afm.string_width_height('VAVAVAVAVAVA') == (7174.0, 718)
 
 
@@ -323,39 +322,33 @@ def test_set_position():
 
 
 def test_get_rotation_string():
-    from matplotlib import text
-    assert text.get_rotation('horizontal') == 0.
-    assert text.get_rotation('vertical') == 90.
-    assert text.get_rotation('15.') == 15.
+    assert mpl.text.get_rotation('horizontal') == 0.
+    assert mpl.text.get_rotation('vertical') == 90.
+    assert mpl.text.get_rotation('15.') == 15.
 
 
 def test_get_rotation_float():
-    from matplotlib import text
     for i in [15., 16.70, 77.4]:
-        assert text.get_rotation(i) == i
+        assert mpl.text.get_rotation(i) == i
 
 
 def test_get_rotation_int():
-    from matplotlib import text
     for i in [67, 16, 41]:
-        assert text.get_rotation(i) == float(i)
+        assert mpl.text.get_rotation(i) == float(i)
 
 
 def test_get_rotation_raises():
-    from matplotlib import text
     with pytest.raises(ValueError):
-        text.get_rotation('hozirontal')
+        mpl.text.get_rotation('hozirontal')
 
 
 def test_get_rotation_none():
-    from matplotlib import text
-    assert text.get_rotation(None) == 0.0
+    assert mpl.text.get_rotation(None) == 0.0
 
 
 def test_get_rotation_mod360():
-    from matplotlib import text
     for i, j in zip([360., 377., 720+177.2], [0., 17., 177.2]):
-        assert_almost_equal(text.get_rotation(i), j)
+        assert_almost_equal(mpl.text.get_rotation(i), j)
 
 
 @pytest.mark.parametrize("ha", ["center", "right", "left"])
@@ -467,10 +460,8 @@ def test_agg_text_clip():
 
 
 def test_text_size_binding():
-    from matplotlib.font_manager import FontProperties
-
     matplotlib.rcParams['font.size'] = 10
-    fp = FontProperties(size='large')
+    fp = mpl.font_manager.FontProperties(size='large')
     sz1 = fp.get_size_in_points()
     matplotlib.rcParams['font.size'] = 100
 
@@ -532,6 +523,21 @@ def test_hinting_factor_backends():
 
 
 @needs_usetex
+def test_usetex_is_copied():
+    # Indirectly tests that update_from (which is used to copy tick label
+    # properties) copies usetex state.
+    fig = plt.figure()
+    plt.rcParams["text.usetex"] = False
+    ax1 = fig.add_subplot(121)
+    plt.rcParams["text.usetex"] = True
+    ax2 = fig.add_subplot(122)
+    fig.canvas.draw()
+    for ax, usetex in [(ax1, False), (ax2, True)]:
+        for t in ax.xaxis.majorTicks:
+            assert t.label1.get_usetex() == usetex
+
+
+@needs_usetex
 def test_single_artist_usetex():
     # Check that a single artist marked with usetex does not get passed through
     # the mathtext parser at all (for the Agg backend) (the mathtext parser
@@ -579,6 +585,18 @@ def test_annotation_update():
                            rtol=1e-6)
 
 
+@check_figures_equal(extensions=["png"])
+def test_annotation_units(fig_test, fig_ref):
+    ax = fig_test.add_subplot()
+    ax.plot(datetime.now(), 1, "o")  # Implicitly set axes extents.
+    ax.annotate("x", (datetime.now(), 0.5), xycoords=("data", "axes fraction"),
+                # This used to crash before.
+                xytext=(0, 0), textcoords="offset points")
+    ax = fig_ref.add_subplot()
+    ax.plot(datetime.now(), 1, "o")
+    ax.annotate("x", (datetime.now(), 0.5), xycoords=("data", "axes fraction"))
+
+
 @image_comparison(['large_subscript_title.png'], style='mpl20')
 def test_large_subscript_title():
     # Remove this line when this test image is regenerated.
@@ -621,3 +639,26 @@ def test_wrap_no_wrap():
     text = fig.text(0, 0, 'non wrapped text', wrap=True)
     fig.canvas.draw()
     assert text._get_wrapped_text() == 'non wrapped text'
+
+
+@check_figures_equal(extensions=["png"])
+def test_buffer_size(fig_test, fig_ref):
+    # On old versions of the Agg renderer, large non-ascii single-character
+    # strings (here, "€") would be rendered clipped because the rendering
+    # buffer would be set by the physical size of the smaller "a" character.
+    ax = fig_test.add_subplot()
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["€", "a"])
+    ax.yaxis.majorTicks[1].label1.set_color("w")
+    ax = fig_ref.add_subplot()
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["€", ""])
+
+
+def test_fontproperties_kwarg_precedence():
+    """Test that kwargs take precedence over fontproperties defaults."""
+    plt.figure()
+    text1 = plt.xlabel("value", fontproperties='Times New Roman', size=40.0)
+    text2 = plt.ylabel("counts", size=40.0, fontproperties='Times New Roman')
+    assert text1.get_size() == 40.0
+    assert text2.get_size() == 40.0

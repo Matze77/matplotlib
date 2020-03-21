@@ -125,9 +125,8 @@ def test_Bug_2543():
         # real test is that this does not raise
         assert validate_bool_maybe_none(None) is None
         assert validate_bool_maybe_none("none") is None
-
-    with pytest.raises(ValueError):
-        validate_bool_maybe_none("blah")
+        with pytest.raises(ValueError):
+            validate_bool_maybe_none("blah")
     with pytest.raises(ValueError):
         validate_bool(None)
     with pytest.raises(ValueError):
@@ -218,7 +217,7 @@ def generate_validator_testcases(valid):
                      ((1, 2), ['1', '2']),
                      (np.array([1, 2]), ['1', '2']),
                      ),
-         'fail': ((dict(), ValueError),
+         'fail': ((set(), ValueError),
                   (1, ValueError),
                   )
          },
@@ -287,8 +286,8 @@ def generate_validator_testcases(valid):
          'success': (('--|', '--|'), ('\\oO', '\\oO'),
                      ('/+*/.x', '/+*/.x'), ('', '')),
          'fail': (('--_', ValueError),
-                 (8, ValueError),
-                 ('X', ValueError)),
+                  (8, ValueError),
+                  ('X', ValueError)),
          },
         {'validator': validate_colorlist,
          'success': (('r,g,b', ['r', 'g', 'b']),
@@ -310,16 +309,16 @@ def generate_validator_testcases(valid):
                      ('AABBCC00', '#AABBCC00'),  # RGBA hex code
                      ('tab:blue', 'tab:blue'),  # named color
                      ('C12', 'C12'),  # color from cycle
-                     ('(0, 1, 0)', [0.0, 1.0, 0.0]),  # RGB tuple
+                     ('(0, 1, 0)', (0.0, 1.0, 0.0)),  # RGB tuple
                      ((0, 1, 0), (0, 1, 0)),  # non-string version
-                     ('(0, 1, 0, 1)', [0.0, 1.0, 0.0, 1.0]),  # RGBA tuple
+                     ('(0, 1, 0, 1)', (0.0, 1.0, 0.0, 1.0)),  # RGBA tuple
                      ((0, 1, 0, 1), (0, 1, 0, 1)),  # non-string version
-                     ('(0, 1, "0.5")', [0.0, 1.0, 0.5]),  # unusual but valid
                      ),
          'fail': (('tab:veryblue', ValueError),  # invalid name
                   ('(0, 1)', ValueError),  # tuple with length < 3
                   ('(0, 1, 0, 1, 0)', ValueError),  # tuple with length > 4
                   ('(0, 1, none)', ValueError),  # cannot cast none to float
+                  ('(0, 1, "0.5")', ValueError),  # last one not a float
                   ),
          },
         {'validator': validate_hist_bins,
@@ -370,18 +369,20 @@ def generate_validator_testcases(valid):
                      ('', ''), (' ', ' '),
                      ('None', 'none'), ('none', 'none'),
                      ('DoTtEd', 'dotted'),  # case-insensitive
-                     (['1.23', '4.56'], (None, [1.23, 4.56])),
-                     ([1.23, 456], (None, [1.23, 456.0])),
-                     ([1, 2, 3, 4], (None, [1.0, 2.0, 3.0, 4.0])),
+                     ('1, 3', (0, (1, 3))),
+                     ([1.23, 456], (0, [1.23, 456.0])),
+                     ([1, 2, 3, 4], (0, [1.0, 2.0, 3.0, 4.0])),
+                     ((0, [1, 2]), (0, [1, 2])),
+                     ((-1, [1, 2]), (-1, [1, 2])),
                      ),
          'fail': (('aardvark', ValueError),  # not a valid string
                   (b'dotted', ValueError),
                   ('dotted'.encode('utf-16'), ValueError),
-                  ((None, [1, 2]), ValueError),  # (offset, dashes) != OK
-                  ((0, [1, 2]), ValueError),  # idem
-                  ((-1, [1, 2]), ValueError),  # idem
                   ([1, 2, 3], ValueError),  # sequence with odd length
                   (1.23, ValueError),  # not a sequence
+                  (("a", [1, 2]), ValueError),  # wrong explicit offset
+                  ((1, [1, 2, 3]), ValueError),  # odd length sequence
+                  (([1, 2], 1), ValueError),  # inverted offset/onoff
                   )
          },
     )
@@ -503,11 +504,9 @@ def test_if_rctemplate_would_be_valid(tmpdir):
     fname = str(d.join('testrcvalid.temp'))
     with open(fname, "w") as f:
         f.writelines(newlines)
-    with pytest.warns(None) as record:
-        mpl.rc_params_from_file(fname,
-                                fail_on_error=True,
-                                use_default_template=False)
-        assert len(record) == 0
+    mpl.rc_params_from_file(fname,
+                            fail_on_error=True,  # Test also fails on warning.
+                            use_default_template=False)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux only")

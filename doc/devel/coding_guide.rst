@@ -32,6 +32,12 @@ When making a PR, pay attention to:
   feedback from the developers. You may mark these as
   `draft pull requests <https://help.github.com/en/articles/about-pull-requests#draft-pull-requests>`_
   on GitHub.
+* When updating your PR, instead of adding new commits to fix something, please
+  consider amending your initial commit(s) to keep the history clean.
+  You can achieve this using::
+
+      git commit --amend --no-edit
+      git push [your-remote-repo] [your-branch] --force-with-lease
 
 See also :ref:`contributing` for how to make a PR.
 
@@ -89,7 +95,7 @@ Documentation
   :file:`doc/users/whats_new.rst`.
 
 * If you change the API in a backward-incompatible way, please
-  document it in :file:`doc/api/api_changes.rst`.
+  document it in the relevant file in :file:`doc/api/next_api_changes`.
 
 .. _pr-labels:
 
@@ -138,8 +144,8 @@ Merging
   approve the review and if you think no more review is needed, merge
   the PR.
 
-  Ensure that all API changes are documented in
-  :file:`doc/api/api_changes` and significant new features have and
+  Ensure that all API changes are documented in the relevant file in
+  :file:`doc/api/next_api_changes` and significant new features have and
   entry in :file:`doc/user/whats_new`.
 
   - If a PR already has a positive review, a core developer (e.g. the first
@@ -164,8 +170,10 @@ Automated tests
 
   - Whenever a pull request is created or updated, Travis and Appveyor
     automatically runs the test suite on all versions of Python
-    supported by Matplotlib.  The `tox` support in Matplotlib may be
+    supported by Matplotlib.  The tox_ support in Matplotlib may be
     useful for testing locally.
+
+  .. _tox: https://tox.readthedocs.io/
 
 * Do not self merge, except for 'small' patches to un-break the CI or
   when another reviewer explicitly allows it (ex, "Approve modulo CI
@@ -306,7 +314,7 @@ Assuming that you already have a local branch ``v2.2.x`` (if not, then
   git cherry-pick -m 1 TARGET_SHA
   # resolve conflicts and commit if required
 
-Files with conflicts can be listed by `git status`,
+Files with conflicts can be listed by ``git status``,
 and will have to be fixed by hand (search on ``>>>>>``).  Once
 the conflict is resolved, you will have to re-add the file(s) to the branch
 and then continue the cherry pick::
@@ -316,4 +324,4 @@ and then continue the cherry pick::
   git cherry-pick --continue
 
 Use your discretion to push directly to upstream or to open a PR; be
-sure to push or PR against the `v2.2.x` upstream branch, not `master`!
+sure to push or PR against the ``v2.2.x`` upstream branch, not ``master``!

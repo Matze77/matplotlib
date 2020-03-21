@@ -38,7 +38,8 @@ STYLE_BLACKLIST = {
     'interactive', 'backend', 'backend.qt4', 'webagg.port', 'webagg.address',
     'webagg.port_retries', 'webagg.open_in_browser', 'backend_fallback',
     'toolbar', 'timezone', 'datapath', 'figure.max_open_warning',
-    'savefig.directory', 'tk.window_focus', 'docstring.hardcopy'}
+    'figure.raise_window', 'savefig.directory', 'tk.window_focus',
+    'docstring.hardcopy'}
 
 
 def _remove_blacklisted_style_params(d, warn=True):
@@ -113,11 +114,11 @@ def use(style):
             try:
                 rc = rc_params_from_file(style, use_default_template=False)
                 _apply_style(rc)
-            except IOError:
+            except IOError as err:
                 raise IOError(
                     "{!r} not found in the style library and input is not a "
                     "valid URL or path; see `style.available` for list of "
-                    "available styles".format(style))
+                    "available styles".format(style)) from err
 
 
 @contextlib.contextmanager

@@ -104,6 +104,14 @@ DeCiDa
 and classes for electron device characterization, electronic circuit design and
 general data visualization and analysis.
 
+matplotlib-scalebar
+===================
+
+`matplotlib-scalebar <https://github.com/ppinard/matplotlib-scalebar>`_ provides a new artist to display a scale bar, aka micron bar.
+It is particularly useful when displaying calibrated images plotted using ``plt.imshow(...)``.
+
+.. image:: /_static/gold_on_carbon.jpg
+
 Matplotlib-Venn
 ===============
 `Matplotlib-Venn <https://github.com/konstantint/matplotlib-venn>`_ provides a
@@ -186,6 +194,36 @@ Yellowbrick
 .. image:: /_static/yellowbrick.png
     :height: 400px
 
+Animations
+**********
+
+animatplot
+==========
+`animatplot <https://animatplot.readthedocs.io/>`_ is a library for
+producing interactive animated plots with the goal of making production of
+animated plots almost as easy as static ones.
+
+.. image:: /_static/animatplot.png
+
+For an animated version of the above picture and more examples, see the
+`animatplot gallery. <https://animatplot.readthedocs.io/en/stable/gallery.html>`_
+
+gif
+===
+`gif <https://github.com/maxhumber/gif/>`_ is an ultra lightweight animated gif API.
+
+.. image:: /_static/gif_attachment_example.png
+
+numpngw
+=======
+
+`numpngw <https://pypi.org/project/numpngw/>`_  provides functions for writing
+NumPy arrays to PNG and animated PNG files.  It also includes the class
+``AnimatedPNGWriter`` that can be used to save a Matplotlib animation as an
+animated PNG file.  See the example on the PyPI page or at the ``numpngw``
+`github repository <https://github.com/WarrenWeckesser/numpngw>`_.
+
+.. image:: /_static/numpngw_animated_example.png
 
 Interactivity
 *************
@@ -200,17 +238,6 @@ MplDataCursor
 `MplDataCursor <https://github.com/joferkington/mpldatacursor>`_ is a toolkit
 written by Joe Kington to provide interactive "data cursors" (clickable
 annotation boxes) for Matplotlib.
-
-animatplot
-==========
-`animatplot <https://animatplot.readthedocs.io/>`_ is a library for
-producing interactive animated plots with the goal of making production of
-animated plots almost as easy as static ones.
-
-.. image:: /_static/animatplot.png
-
-For an animated version of the above picture and more examples, see the
-`animatplot gallery. <https://animatplot.readthedocs.io/en/stable/gallery.html>`_
 
 Rendering backends
 ******************
@@ -255,17 +282,6 @@ border, and logo.
 .. image:: /_static/mpl_template_example.png
     :height: 330px
 
-numpngw
-=======
-
-`numpngw <https://pypi.org/project/numpngw/>`_  provides functions for writing
-NumPy arrays to PNG and animated PNG files.  It also includes the class
-``AnimatedPNGWriter`` that can be used to save a Matplotlib animation as an
-animated PNG file.  See the example on the PyPI page or at the ``numpngw``
-`github repository <https://github.com/WarrenWeckesser/numpngw>`_.
-
-.. image:: /_static/numpngw_animated_example.png
-
 blume
 =====
 
@@ -275,4 +291,31 @@ existing table. See the `blume github repository
 <https://github.com/swfiua/blume>`_ for more details.
 
 .. image:: /_static/blume_table_example.png
-           
+
+
+DNA Features Viewer
+===================
+
+`DNA Features Viewer <https://github.com/Edinburgh-Genome-Foundry/DnaFeaturesViewer>`_
+provides methods to plot annotated DNA sequence maps (possibly along other Matplotlib
+plots) for Bioinformatics and Synthetic Biology applications.
+
+.. image:: /_static/dna_features_viewer_screenshot.png
+
+GUI applications
+****************
+
+sviewgui
+========
+
+`sviewgui <https://pypi.org/project/sviewgui/>`_ is a PyQt-based GUI for
+visualisation of data from csv files or `pandas.DataFrame`\s. Main features:
+
+- Scatter, line, density, histgram, and box plot types
+- Settings for the marker size, line width, number of bins of histgram,
+  color map (from cmocean)
+- Save figure as editable PDF
+- Code of the plotted graph is available so that it can be reused and modified
+  outside of sviewgui
+
+.. image:: /_static/sviewgui_sample.png

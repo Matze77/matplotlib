@@ -1,6 +1,7 @@
 import numpy as np
 import math
 
+from matplotlib import cbook
 from mpl_toolkits.axisartist.grid_finder import ExtremeFinderSimple
 
 
@@ -156,54 +157,56 @@ def select_step360(v1, v2, nv, include_last=True, threshold_factor=3600):
 
 
 class LocatorBase:
-    def __init__(self, den, include_last=True):
-        self.den = den
+    @cbook._rename_parameter("3.3", "den", "nbins")
+    def __init__(self, nbins, include_last=True):
+        self.nbins = nbins
         self._include_last = include_last
 
+    @cbook.deprecated("3.3", alternative="nbins")
     @property
-    def nbins(self):
-        return self.den
+    def den(self):
+        return self.nbins
 
-    @nbins.setter
-    def nbins(self, v):
-        self.den = v
+    @den.setter
+    def den(self, v):
+        self.nbins = v
 
     def set_params(self, nbins=None):
         if nbins is not None:
-            self.den = int(nbins)
+            self.nbins = int(nbins)
 
 
 class LocatorHMS(LocatorBase):
     def __call__(self, v1, v2):
-        return select_step24(v1, v2, self.den, self._include_last)
+        return select_step24(v1, v2, self.nbins, self._include_last)
 
 
 class LocatorHM(LocatorBase):
     def __call__(self, v1, v2):
-        return select_step24(v1, v2, self.den, self._include_last,
+        return select_step24(v1, v2, self.nbins, self._include_last,
                              threshold_factor=60)
 
 
 class LocatorH(LocatorBase):
     def __call__(self, v1, v2):
-        return select_step24(v1, v2, self.den, self._include_last,
+        return select_step24(v1, v2, self.nbins, self._include_last,
                              threshold_factor=1)
 
 
 class LocatorDMS(LocatorBase):
     def __call__(self, v1, v2):
-        return select_step360(v1, v2, self.den, self._include_last)
+        return select_step360(v1, v2, self.nbins, self._include_last)
 
 
 class LocatorDM(LocatorBase):
     def __call__(self, v1, v2):
-        return select_step360(v1, v2, self.den, self._include_last,
+        return select_step360(v1, v2, self.nbins, self._include_last,
                               threshold_factor=60)
 
 
 class LocatorD(LocatorBase):
     def __call__(self, v1, v2):
-        return select_step360(v1, v2, self.den, self._include_last,
+        return select_step360(v1, v2, self.nbins, self._include_last,
                               threshold_factor=1)
 
 
@@ -372,14 +375,14 @@ class ExtremeFinderCycle(ExtremeFinderSimple):
         lat_min, lat_max = np.nanmin(lat), np.nanmax(lat)
 
         lon_min, lon_max, lat_min, lat_max = \
-                 self._adjust_extremes(lon_min, lon_max, lat_min, lat_max)
+            self._adjust_extremes(lon_min, lon_max, lat_min, lat_max)
 
         return lon_min, lon_max, lat_min, lat_max
 
     def _adjust_extremes(self, lon_min, lon_max, lat_min, lat_max):
 
         lon_min, lon_max, lat_min, lat_max = \
-                 self._add_pad(lon_min, lon_max, lat_min, lat_max)
+            self._add_pad(lon_min, lon_max, lat_min, lat_max)
 
         # check cycle
         if self.lon_cycle:

@@ -1,4 +1,5 @@
 import functools
+import importlib
 import os
 import re
 import signal
@@ -17,7 +18,8 @@ from matplotlib.backends.qt_editor.formsubplottool import UiSubplotTool
 from matplotlib.backend_managers import ToolManager
 
 from .qt_compat import (
-    QtCore, QtGui, QtWidgets, _getSaveFileName, is_pyqt5, __version__, QT_API)
+    QtCore, QtGui, QtWidgets, _isdeleted, _getSaveFileName,
+    is_pyqt5, __version__, QT_API)
 
 backend_version = __version__
 
@@ -107,7 +109,9 @@ def _create_qApp():
             # check for DISPLAY env variable on X11 build of Qt
             if is_pyqt5():
                 try:
-                    from PyQt5 import QtX11Extras
+                    importlib.import_module(
+                        # i.e. PyQt5.QtX11Extras or PySide2.QtX11Extras.
+                        f"{QtWidgets.__package__}.QtX11Extras")
                     is_x11_build = True
                 except ImportError:
                     is_x11_build = False
@@ -175,31 +179,21 @@ def _allow_super_init(__init__):
 
 
 class TimerQT(TimerBase):
-    '''
-    Subclass of :class:`backend_bases.TimerBase` that uses Qt timer events.
-
-    Attributes
-    ----------
-    interval : int
-        The time between timer events in milliseconds. Default is 1000 ms.
-    single_shot : bool
-        Boolean flag indicating whether this timer should
-        operate as single shot (run once and then stop). Defaults to False.
-    callbacks : list
-        Stores list of (func, args) tuples that will be called upon timer
-        events. This list can be manipulated directly, or the functions
-        `add_callback` and `remove_callback` can be used.
-
-    '''
+    """Subclass of `.TimerBase` using QTimer events."""
 
     def __init__(self, *args, **kwargs):
         TimerBase.__init__(self, *args, **kwargs)
-
         # Create a new timer and connect the timeout() signal to the
         # _on_timer method.
         self._timer = QtCore.QTimer()
         self._timer.timeout.connect(self._on_timer)
         self._timer_set_interval()
+
+    def __del__(self):
+        # The check for deletedness is needed to avoid an error at animation
+        # shutdown with PySide2.
+        if not _isdeleted(self._timer):
+            self._timer_stop()
 
     def _timer_set_single_shot(self):
         self._timer.setSingleShot(self._single)
@@ -216,6 +210,7 @@ class TimerQT(TimerBase):
 
 class FigureCanvasQT(QtWidgets.QWidget, FigureCanvasBase):
     required_interactive_framework = "qt5"
+    _timer_cls = TimerQT
 
     # map Qt button codes to MouseEvent's ones:
     buttond = {QtCore.Qt.LeftButton: MouseButton.LEFT,
@@ -230,7 +225,6 @@ class FigureCanvasQT(QtWidgets.QWidget, FigureCanvasBase):
         _create_qApp()
         super().__init__(figure=figure)
 
-        self.figure = figure
         # We don't want to scale up the figure DPI more than once.
         # Note, we don't handle a signal for changing DPI yet.
         figure._original_dpi = figure.dpi
@@ -435,10 +429,6 @@ class FigureCanvasQT(QtWidgets.QWidget, FigureCanvasBase):
         mods.reverse()
         return '+'.join(mods + [key])
 
-    def new_timer(self, *args, **kwargs):
-        # docstring inherited
-        return TimerQT(*args, **kwargs)
-
     def flush_events(self):
         # docstring inherited
         qApp.processEvents()
@@ -477,22 +467,22 @@ class FigureCanvasQT(QtWidgets.QWidget, FigureCanvasBase):
         # accumulate multiple draw requests from event handling.
         # TODO: queued signal connection might be safer than singleShot
         if not (getattr(self, '_draw_pending', False) or
-                getattr(self, '._is_drawing', False)):
+                getattr(self, '_is_drawing', False)):
             self._draw_pending = True
             QtCore.QTimer.singleShot(0, self._draw_idle)
 
     def _draw_idle(self):
-        if self.height() < 0 or self.width() < 0:
+        with self._idle_draw_cntx():
+            if not self._draw_pending:
+                return
             self._draw_pending = False
-        if not self._draw_pending:
-            return
-        try:
-            self.draw()
-        except Exception:
-            # Uncaught exceptions are fatal for PyQt5, so catch them instead.
-            traceback.print_exc()
-        finally:
-            self._draw_pending = False
+            if self.height() < 0 or self.width() < 0:
+                return
+            try:
+                self.draw()
+            except Exception:
+                # Uncaught exceptions are fatal for PyQt5, so catch them.
+                traceback.print_exc()
 
     def drawRectangle(self, rect):
         # Draw the zoom rectangle to the QPainter.  _draw_rect_callback needs
@@ -573,6 +563,16 @@ class FigureManagerQT(FigureManagerBase):
                 statusbar_label = QtWidgets.QLabel()
                 self.window.statusBar().addWidget(statusbar_label)
                 self.toolbar.message.connect(statusbar_label.setText)
+            tbs_height = self.toolbar.sizeHint().height()
+        else:
+            tbs_height = 0
+
+        # resize the main window so it will display the canvas with the
+        # requested size:
+        cs = canvas.sizeHint()
+        sbs = self.window.statusBar().sizeHint()
+        height = cs.height() + tbs_height + sbs.height()
+        self.window.resize(cs.width(), height)
 
         self.window.setCentralWidget(self.canvas)
 
@@ -593,7 +593,7 @@ class FigureManagerQT(FigureManagerBase):
             return
         self.window._destroying = True
         try:
-            Gcf.destroy(self.num)
+            Gcf.destroy(self)
         except AttributeError:
             pass
             # It seems that when the python session is killed,
@@ -628,8 +628,9 @@ class FigureManagerQT(FigureManagerBase):
 
     def show(self):
         self.window.show()
-        self.window.activateWindow()
-        self.window.raise_()
+        if matplotlib.rcParams['figure.raise_window']:
+            self.window.activateWindow()
+            self.window.raise_()
 
     def destroy(self, *args):
         # check for qApp first, as PySide deletes it in its atexit handler
@@ -652,16 +653,28 @@ class FigureManagerQT(FigureManagerBase):
 class NavigationToolbar2QT(NavigationToolbar2, QtWidgets.QToolBar):
     message = QtCore.Signal(str)
 
+    toolitems = [*NavigationToolbar2.toolitems]
+    toolitems.insert(
+        # Add 'customize' action after 'subplots'
+        [name for name, *_ in toolitems].index("Subplots") + 1,
+        ("Customize", "Edit axis, curve and image parameters",
+         "qt4_editor_options", "edit_parameters"))
+
     def __init__(self, canvas, parent, coordinates=True):
         """coordinates: should we show the coordinates on the right?"""
         self.canvas = canvas
-        self.parent = parent
+        self._parent = parent
         self.coordinates = coordinates
         self._actions = {}
         """A mapping of toolitem method names to their QActions"""
 
         QtWidgets.QToolBar.__init__(self, parent)
         NavigationToolbar2.__init__(self, canvas)
+
+    @cbook.deprecated("3.3", alternative="self.canvas.parent()")
+    @property
+    def parent(self):
+        return self._parent
 
     def _icon(self, name, color=None):
         if is_pyqt5():
@@ -695,11 +708,6 @@ class NavigationToolbar2QT(NavigationToolbar2, QtWidgets.QToolBar):
                     a.setCheckable(True)
                 if tooltip_text is not None:
                     a.setToolTip(tooltip_text)
-                if text == 'Subplots':
-                    a = self.addAction(self._icon("qt4_editor_options.png",
-                                                  icon_color),
-                                       'Customize', self.edit_parameters)
-                    a.setToolTip('Edit axis, curve and image parameters')
 
         # Add the (x, y) location widget at the right side of the toolbar
         # The stretch factor is 1 which means any resizing of the toolbar
@@ -714,21 +722,11 @@ class NavigationToolbar2QT(NavigationToolbar2, QtWidgets.QToolBar):
             labelAction = self.addWidget(self.locLabel)
             labelAction.setVisible(True)
 
-    @cbook.deprecated("3.1")
-    @property
-    def buttons(self):
-        return {}
-
-    @cbook.deprecated("3.1")
-    @property
-    def adj_window(self):
-        return None
-
     def edit_parameters(self):
         axes = self.canvas.figure.get_axes()
         if not axes:
             QtWidgets.QMessageBox.warning(
-                self.parent, "Error", "There are no axes to edit.")
+                self.canvas.parent(), "Error", "There are no axes to edit.")
             return
         elif len(axes) == 1:
             ax, = axes
@@ -745,7 +743,8 @@ class NavigationToolbar2QT(NavigationToolbar2, QtWidgets.QToolBar):
                 if titles[i] in duplicate_titles:
                     titles[i] += f" (id: {id(ax):#x})"  # Deduplicate titles.
             item, ok = QtWidgets.QInputDialog.getItem(
-                self.parent, 'Customize', 'Select axes:', titles, 0, False)
+                self.canvas.parent(),
+                'Customize', 'Select axes:', titles, 0, False)
             if not ok:
                 return
             ax = axes[titles.index(item)]
@@ -1034,9 +1033,12 @@ class _BackendQT5(_Backend):
     def mainloop():
         old_signal = signal.getsignal(signal.SIGINT)
         # allow SIGINT exceptions to close the plot window.
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
+        is_python_signal_handler = old_signal is not None
+        if is_python_signal_handler:
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
         try:
             qApp.exec_()
         finally:
             # reset the SIGINT exception handler
-            signal.signal(signal.SIGINT, old_signal)
+            if is_python_signal_handler:
+                signal.signal(signal.SIGINT, old_signal)

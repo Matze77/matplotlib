@@ -16,12 +16,11 @@ from mpl_toolkits.axisartist.grid_helper_curvelinear import \
     GridHelperCurveLinear
 
 
-@image_comparison(['custom_transform.png'], style='default', tol=0.03)
+@image_comparison(['custom_transform.png'], style='default',
+                  tol={'aarch64': 0.034}.get(platform.machine(), 0.03))
 def test_custom_transform():
     class MyTransform(Transform):
-        input_dims = 2
-        output_dims = 2
-        is_separable = False
+        input_dims = output_dims = 2
 
         def __init__(self, resolution):
             """
@@ -47,9 +46,7 @@ def test_custom_transform():
             return MyTransformInv(self._resolution)
 
     class MyTransformInv(Transform):
-        input_dims = 2
-        output_dims = 2
-        is_separable = False
+        input_dims = output_dims = 2
 
         def __init__(self, resolution):
             Transform.__init__(self)
@@ -206,8 +203,8 @@ def test_axis_direction():
     axis.major_ticklabels.set_axis_direction("top")
     axis.label.set_axis_direction("top")
 
-    grid_helper.grid_finder.grid_locator1.den = 5
-    grid_helper.grid_finder.grid_locator2._nbins = 5
+    grid_helper.grid_finder.grid_locator1.set_params(nbins=5)
+    grid_helper.grid_finder.grid_locator2.set_params(nbins=5)
 
     ax1.set_aspect(1.)
     ax1.set_xlim(-8, 8)

@@ -48,6 +48,16 @@ def test_resample():
     assert_array_almost_equal(lc3([0, 0.5, 1]), expected)
 
 
+def test_register_cmap():
+    new_cm = copy.copy(plt.cm.viridis)
+    cm.register_cmap('viridis2', new_cm)
+    assert plt.get_cmap('viridis2') == new_cm
+
+    with pytest.raises(ValueError,
+                       match='Arguments must include a name or a Colormap'):
+        cm.register_cmap()
+
+
 def test_colormap_copy():
     cm = plt.cm.Reds
     cm_copy = copy.copy(cm)
@@ -295,91 +305,91 @@ def test_Normalize():
     assert 0 < norm(1 + 50 * eps) < 1
 
 
-def test_DivergingNorm_autoscale():
-    norm = mcolors.DivergingNorm(vcenter=20)
+def test_TwoSlopeNorm_autoscale():
+    norm = mcolors.TwoSlopeNorm(vcenter=20)
     norm.autoscale([10, 20, 30, 40])
     assert norm.vmin == 10.
     assert norm.vmax == 40.
 
 
-def test_DivergingNorm_autoscale_None_vmin():
-    norm = mcolors.DivergingNorm(2, vmin=0, vmax=None)
+def test_TwoSlopeNorm_autoscale_None_vmin():
+    norm = mcolors.TwoSlopeNorm(2, vmin=0, vmax=None)
     norm.autoscale_None([1, 2, 3, 4, 5])
     assert norm(5) == 1
     assert norm.vmax == 5
 
 
-def test_DivergingNorm_autoscale_None_vmax():
-    norm = mcolors.DivergingNorm(2, vmin=None, vmax=10)
+def test_TwoSlopeNorm_autoscale_None_vmax():
+    norm = mcolors.TwoSlopeNorm(2, vmin=None, vmax=10)
     norm.autoscale_None([1, 2, 3, 4, 5])
     assert norm(1) == 0
     assert norm.vmin == 1
 
 
-def test_DivergingNorm_scale():
-    norm = mcolors.DivergingNorm(2)
+def test_TwoSlopeNorm_scale():
+    norm = mcolors.TwoSlopeNorm(2)
     assert norm.scaled() is False
     norm([1, 2, 3, 4])
     assert norm.scaled() is True
 
 
-def test_DivergingNorm_scaleout_center():
+def test_TwoSlopeNorm_scaleout_center():
     # test the vmin never goes above vcenter
-    norm = mcolors.DivergingNorm(vcenter=0)
+    norm = mcolors.TwoSlopeNorm(vcenter=0)
     norm([1, 2, 3, 5])
     assert norm.vmin == 0
     assert norm.vmax == 5
 
 
-def test_DivergingNorm_scaleout_center_max():
+def test_TwoSlopeNorm_scaleout_center_max():
     # test the vmax never goes below vcenter
-    norm = mcolors.DivergingNorm(vcenter=0)
+    norm = mcolors.TwoSlopeNorm(vcenter=0)
     norm([-1, -2, -3, -5])
     assert norm.vmax == 0
     assert norm.vmin == -5
 
 
-def test_DivergingNorm_Even():
-    norm = mcolors.DivergingNorm(vmin=-1, vcenter=0, vmax=4)
+def test_TwoSlopeNorm_Even():
+    norm = mcolors.TwoSlopeNorm(vmin=-1, vcenter=0, vmax=4)
     vals = np.array([-1.0, -0.5, 0.0, 1.0, 2.0, 3.0, 4.0])
     expected = np.array([0.0, 0.25, 0.5, 0.625, 0.75, 0.875, 1.0])
     assert_array_equal(norm(vals), expected)
 
 
-def test_DivergingNorm_Odd():
-    norm = mcolors.DivergingNorm(vmin=-2, vcenter=0, vmax=5)
+def test_TwoSlopeNorm_Odd():
+    norm = mcolors.TwoSlopeNorm(vmin=-2, vcenter=0, vmax=5)
     vals = np.array([-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0])
     expected = np.array([0.0, 0.25, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
     assert_array_equal(norm(vals), expected)
 
 
-def test_DivergingNorm_VminEqualsVcenter():
+def test_TwoSlopeNorm_VminEqualsVcenter():
     with pytest.raises(ValueError):
-        mcolors.DivergingNorm(vmin=-2, vcenter=-2, vmax=2)
+        mcolors.TwoSlopeNorm(vmin=-2, vcenter=-2, vmax=2)
 
 
-def test_DivergingNorm_VmaxEqualsVcenter():
+def test_TwoSlopeNorm_VmaxEqualsVcenter():
     with pytest.raises(ValueError):
-        mcolors.DivergingNorm(vmin=-2, vcenter=2, vmax=2)
+        mcolors.TwoSlopeNorm(vmin=-2, vcenter=2, vmax=2)
 
 
-def test_DivergingNorm_VminGTVcenter():
+def test_TwoSlopeNorm_VminGTVcenter():
     with pytest.raises(ValueError):
-        mcolors.DivergingNorm(vmin=10, vcenter=0, vmax=20)
+        mcolors.TwoSlopeNorm(vmin=10, vcenter=0, vmax=20)
 
 
-def test_DivergingNorm_DivergingNorm_VminGTVmax():
+def test_TwoSlopeNorm_TwoSlopeNorm_VminGTVmax():
     with pytest.raises(ValueError):
-        mcolors.DivergingNorm(vmin=10, vcenter=0, vmax=5)
+        mcolors.TwoSlopeNorm(vmin=10, vcenter=0, vmax=5)
 
 
-def test_DivergingNorm_VcenterGTVmax():
+def test_TwoSlopeNorm_VcenterGTVmax():
     with pytest.raises(ValueError):
-        mcolors.DivergingNorm(vmin=10, vcenter=25, vmax=20)
+        mcolors.TwoSlopeNorm(vmin=10, vcenter=25, vmax=20)
 
 
-def test_DivergingNorm_premature_scaling():
-    norm = mcolors.DivergingNorm(vcenter=2)
+def test_TwoSlopeNorm_premature_scaling():
+    norm = mcolors.TwoSlopeNorm(vcenter=2)
     with pytest.raises(ValueError):
         norm.inverse(np.array([0.1, 0.5, 0.9]))
 
@@ -388,7 +398,7 @@ def test_SymLogNorm():
     """
     Test SymLogNorm behavior
     """
-    norm = mcolors.SymLogNorm(3, vmax=5, linscale=1.2)
+    norm = mcolors.SymLogNorm(3, vmax=5, linscale=1.2, base=np.e)
     vals = np.array([-30, -1, 2, 6], dtype=float)
     normed_vals = norm(vals)
     expected = [0., 0.53980074, 0.826991, 1.02758204]
@@ -398,16 +408,30 @@ def test_SymLogNorm():
     _mask_tester(norm, vals)
 
     # Ensure that specifying vmin returns the same result as above
-    norm = mcolors.SymLogNorm(3, vmin=-30, vmax=5, linscale=1.2)
+    norm = mcolors.SymLogNorm(3, vmin=-30, vmax=5, linscale=1.2, base=np.e)
     normed_vals = norm(vals)
     assert_array_almost_equal(normed_vals, expected)
+
+    # test something more easily checked.
+    norm = mcolors.SymLogNorm(1, vmin=-np.e**3, vmax=np.e**3, base=np.e)
+    nn = norm([-np.e**3, -np.e**2, -np.e**1, -1,
+              0, 1, np.e**1, np.e**2, np.e**3])
+    xx = np.array([0., 0.109123, 0.218246, 0.32737, 0.5, 0.67263,
+                   0.781754, 0.890877, 1.])
+    assert_array_almost_equal(nn, xx)
+    norm = mcolors.SymLogNorm(1, vmin=-10**3, vmax=10**3, base=10)
+    nn = norm([-10**3, -10**2, -10**1, -1,
+              0, 1, 10**1, 10**2, 10**3])
+    xx = np.array([0., 0.121622, 0.243243, 0.364865, 0.5, 0.635135,
+                   0.756757, 0.878378, 1.])
+    assert_array_almost_equal(nn, xx)
 
 
 def test_SymLogNorm_colorbar():
     """
     Test un-called SymLogNorm in a colorbar.
     """
-    norm = mcolors.SymLogNorm(0.1, vmin=-1, vmax=1, linscale=1)
+    norm = mcolors.SymLogNorm(0.1, vmin=-1, vmax=1, linscale=1, base=np.e)
     fig = plt.figure()
     mcolorbar.ColorbarBase(fig.add_subplot(111), norm=norm)
     plt.close(fig)
@@ -418,7 +442,7 @@ def test_SymLogNorm_single_zero():
     Test SymLogNorm to ensure it is not adding sub-ticks to zero label
     """
     fig = plt.figure()
-    norm = mcolors.SymLogNorm(1e-5, vmin=-1, vmax=1)
+    norm = mcolors.SymLogNorm(1e-5, vmin=-1, vmax=1, base=np.e)
     cbar = mcolorbar.ColorbarBase(fig.add_subplot(111), norm=norm)
     ticks = cbar.get_ticks()
     assert sum(ticks == 0) == 1
@@ -530,10 +554,10 @@ def test_rgb_hsv_round_trip():
     for a_shape in [(500, 500, 3), (500, 3), (1, 3), (3,)]:
         np.random.seed(0)
         tt = np.random.random(a_shape)
-        assert_array_almost_equal(tt,
-            mcolors.hsv_to_rgb(mcolors.rgb_to_hsv(tt)))
-        assert_array_almost_equal(tt,
-            mcolors.rgb_to_hsv(mcolors.hsv_to_rgb(tt)))
+        assert_array_almost_equal(
+            tt, mcolors.hsv_to_rgb(mcolors.rgb_to_hsv(tt)))
+        assert_array_almost_equal(
+            tt, mcolors.rgb_to_hsv(mcolors.hsv_to_rgb(tt)))
 
 
 def test_autoscale_masked():
@@ -880,7 +904,7 @@ def test_tableau_order():
     assert list(mcolors.TABLEAU_COLORS.values()) == dflt_cycle
 
 
-def test_ndarray_subclass_norm(recwarn):
+def test_ndarray_subclass_norm():
     # Emulate an ndarray subclass that handles units
     # which objects when adding or subtracting with other
     # arrays. See #6622 and #8696
@@ -895,16 +919,15 @@ def test_ndarray_subclass_norm(recwarn):
     mydata = data.view(MyArray)
 
     for norm in [mcolors.Normalize(), mcolors.LogNorm(),
-                 mcolors.SymLogNorm(3, vmax=5, linscale=1),
+                 mcolors.SymLogNorm(3, vmax=5, linscale=1, base=np.e),
                  mcolors.Normalize(vmin=mydata.min(), vmax=mydata.max()),
-                 mcolors.SymLogNorm(3, vmin=mydata.min(), vmax=mydata.max()),
+                 mcolors.SymLogNorm(3, vmin=mydata.min(), vmax=mydata.max(),
+                                    base=np.e),
                  mcolors.PowerNorm(1)]:
         assert_array_equal(norm(mydata), norm(data))
         fig, ax = plt.subplots()
         ax.imshow(mydata, norm=norm)
-        fig.canvas.draw()
-        assert len(recwarn) == 0
-        recwarn.clear()
+        fig.canvas.draw()  # Check that no warning is emitted.
 
 
 def test_same_color():
@@ -915,3 +938,8 @@ def test_same_color():
 def test_hex_shorthand_notation():
     assert mcolors.same_color("#123", "#112233")
     assert mcolors.same_color("#123a", "#112233aa")
+
+
+def test_DivergingNorm_deprecated():
+    with pytest.warns(cbook.MatplotlibDeprecationWarning):
+        norm = mcolors.DivergingNorm(vcenter=0)

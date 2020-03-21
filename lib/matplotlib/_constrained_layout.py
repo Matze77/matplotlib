@@ -77,7 +77,7 @@ def _axes_all_finite_sized(fig):
 
 ######################################################
 def do_constrained_layout(fig, renderer, h_pad, w_pad,
-        hspace=None, wspace=None):
+                          hspace=None, wspace=None):
     """
     Do the constrained_layout.  Called at draw time in
      ``figure.constrained_layout()``
@@ -254,10 +254,7 @@ def _make_ghost_gridspec_slots(fig, gs):
             # this gridspec slot doesn't have an axis so we
             # make a "ghost".
             ax = fig.add_subplot(gs[nn])
-            ax.set_frame_on(False)
-            ax.set_xticks([])
-            ax.set_yticks([])
-            ax.set_facecolor((1, 0, 0, 0))
+            ax.set_visible(False)
 
 
 def _make_layout_margins(ax, renderer, h_pad, w_pad):
@@ -277,7 +274,7 @@ def _make_layout_margins(ax, renderer, h_pad, w_pad):
 
     # this can go wrong:
     if not (np.isfinite(bbox.width) and np.isfinite(bbox.height)):
-        # just abort, this is likely a bad set of co-ordinates that
+        # just abort, this is likely a bad set of coordinates that
         # is transitory...
         return
     # use stored h_pad if it exists
@@ -287,12 +284,9 @@ def _make_layout_margins(ax, renderer, h_pad, w_pad):
     w_padt = ax._poslayoutbox.w_pad
     if w_padt is None:
         w_padt = w_pad
-    ax._poslayoutbox.edit_left_margin_min(-bbox.x0 +
-            pos.x0 + w_padt)
-    ax._poslayoutbox.edit_right_margin_min(bbox.x1 -
-            pos.x1 + w_padt)
-    ax._poslayoutbox.edit_bottom_margin_min(
-            -bbox.y0 + pos.y0 + h_padt)
+    ax._poslayoutbox.edit_left_margin_min(-bbox.x0 + pos.x0 + w_padt)
+    ax._poslayoutbox.edit_right_margin_min(bbox.x1 - pos.x1 + w_padt)
+    ax._poslayoutbox.edit_bottom_margin_min(-bbox.y0 + pos.y0 + h_padt)
     ax._poslayoutbox.edit_top_margin_min(bbox.y1-pos.y1+h_padt)
     _log.debug('left %f', (-bbox.x0 + pos.x0 + w_pad))
     _log.debug('right %f', (bbox.x1 - pos.x1 + w_pad))
@@ -309,8 +303,7 @@ def _make_layout_margins(ax, renderer, h_pad, w_pad):
         ax._layoutbox.constrain_height_min(20, strength='weak')
         ax._layoutbox.constrain_width_min(20, strength='weak')
         ax._poslayoutbox.constrain_top_margin(0, strength='weak')
-        ax._poslayoutbox.constrain_bottom_margin(0,
-                strength='weak')
+        ax._poslayoutbox.constrain_bottom_margin(0, strength='weak')
         ax._poslayoutbox.constrain_right_margin(0, strength='weak')
         ax._poslayoutbox.constrain_left_margin(0, strength='weak')
 
@@ -332,12 +325,10 @@ def _align_spines(fig, gs):
         height_ratios = np.ones(nrows)
 
     # get axes in this gridspec....
-    axs = []
-    for ax in fig.axes:
-        if (hasattr(ax, 'get_subplotspec')
-                and ax._layoutbox is not None):
-            if ax.get_subplotspec().get_gridspec() == gs:
-                axs += [ax]
+    axs = [ax for ax in fig.axes
+           if (hasattr(ax, 'get_subplotspec')
+               and ax._layoutbox is not None
+               and ax.get_subplotspec().get_gridspec() == gs)]
     rownummin = np.zeros(len(axs), dtype=np.int8)
     rownummax = np.zeros(len(axs), dtype=np.int8)
     colnummin = np.zeros(len(axs), dtype=np.int8)
@@ -379,15 +370,12 @@ def _align_spines(fig, gs):
             if not alignleft and colnum0min == colnumCmin:
                 # we want the _poslayoutboxes to line up on left
                 # side of the axes spines...
-                layoutbox.align([ax._poslayoutbox,
-                                 axc._poslayoutbox],
+                layoutbox.align([ax._poslayoutbox, axc._poslayoutbox],
                                 'left')
                 alignleft = True
-
             if not alignright and colnum0max == colnumCmax:
                 # line up right sides of _poslayoutbox
-                layoutbox.align([ax._poslayoutbox,
-                                 axc._poslayoutbox],
+                layoutbox.align([ax._poslayoutbox, axc._poslayoutbox],
                                 'right')
                 alignright = True
             # Vertically align axes spines if they have the
@@ -398,7 +386,6 @@ def _align_spines(fig, gs):
                 layoutbox.align([ax._poslayoutbox, axc._poslayoutbox],
                                 'top')
                 aligntop = True
-
             if not alignbot and rownum0max == rownumCmax:
                 # line up bottom of _poslayoutbox
                 _log.debug('rownum0max == rownumCmax')
@@ -412,8 +399,8 @@ def _align_spines(fig, gs):
             # different sizes if they occupy different amounts
             # of the gridspec:  i.e.
             # gs = gridspec.GridSpec(3, 1)
-            # ax1 = gs[0,:]
-            # ax2 = gs[1:,:]
+            # ax1 = gs[0, :]
+            # ax2 = gs[1:, :]
             # then drows0 = 1, and drowsC = 2, and ax2
             # should be at least twice as large as ax1.
             # But it can be more than twice as large because
@@ -433,7 +420,7 @@ def _align_spines(fig, gs):
                         axc._poslayoutbox.height * height0 / heightC)
                 alignheight = True
             elif _in_same_column(colnum0min, colnum0max,
-                    colnumCmin, colnumCmax):
+                                 colnumCmin, colnumCmax):
                 if height0 > heightC:
                     ax._poslayoutbox.constrain_height_min(
                         axc._poslayoutbox.height * height0 / heightC)
@@ -454,7 +441,7 @@ def _align_spines(fig, gs):
                         axc._poslayoutbox.width * width0 / widthC)
                 alignwidth = True
             elif _in_same_row(rownum0min, rownum0max,
-                    rownumCmin, rownumCmax):
+                              rownumCmin, rownumCmax):
                 if width0 > widthC:
                     ax._poslayoutbox.constrain_width_min(
                             axc._poslayoutbox.width * width0 / widthC)
@@ -495,10 +482,10 @@ def _arrange_subplotspecs(gs, hspace=0, wspace=0):
             thepad = wspace / ncols
             if colNum0max < colNumCmin:
                 layoutbox.hstack([ss0._layoutbox, ssc._layoutbox],
-                        padding=thepad)
+                                 padding=thepad)
             if colNumCmax < colNum0min:
                 layoutbox.hstack([ssc._layoutbox, ss0._layoutbox],
-                        padding=thepad)
+                                 padding=thepad)
 
             ####
             # vertical alignment
@@ -634,7 +621,7 @@ def layoutcolorbargridspec(parents, cax, shrink, aspect, location, pad=0.05):
             else:
                 order = [lb, ax._layoutbox]
             layoutbox.hstack(order, padding=pad * gslb.width,
-                         strength='strong')
+                             strength='strong')
         # constrain the height and center...
         # This isn't quite right.  We'd like the colorbar
         # pos to line up w/ the axes poss, not the size of the
@@ -694,7 +681,7 @@ def layoutcolorbargridspec(parents, cax, shrink, aspect, location, pad=0.05):
             else:
                 order = [lb, ax._layoutbox]
             layoutbox.vstack(order, padding=pad * gslb.width,
-                         strength='strong')
+                             strength='strong')
 
         # Vertical Layout: need to check all the axes in this gridspec
         for ch in gslb.children:

@@ -119,16 +119,16 @@ cmap = cm.get_cmap(name='Blues', lut=None)
 
 fig, ax = plt.subplots()
 ax.set_aspect('equal')
-ax.set_title("Filtering a Delaunay mesh\n" +
-          "(application to high-resolution tricontouring)")
+ax.set_title("Filtering a Delaunay mesh\n"
+             "(application to high-resolution tricontouring)")
 
 # 1) plot of the refined (computed) data contours:
 ax.tricontour(tri_refi, z_test_refi, levels=levels, cmap=cmap,
-               linewidths=[2.0, 0.5, 1.0, 0.5])
+              linewidths=[2.0, 0.5, 1.0, 0.5])
 # 2) plot of the expected (analytical) data contours (dashed):
 if plot_expected:
     ax.tricontour(tri_refi, z_expected, levels=levels, cmap=cmap,
-                   linestyles='--')
+                  linestyles='--')
 # 3) plot of the fine mesh on which interpolation was done:
 if plot_refi_tri:
     ax.triplot(tri_refi, color='0.97')
