@@ -1,5 +1,6 @@
 import itertools
 import pickle
+
 from weakref import ref
 from unittest.mock import patch, Mock
 
@@ -10,17 +11,10 @@ from numpy.testing import (assert_array_equal, assert_approx_equal,
                            assert_array_almost_equal)
 import pytest
 
+from matplotlib import _api
 import matplotlib.cbook as cbook
 import matplotlib.colors as mcolors
 from matplotlib.cbook import MatplotlibDeprecationWarning, delete_masked_points
-
-
-def test_is_hashable():
-    with pytest.warns(MatplotlibDeprecationWarning):
-        s = 'string'
-        assert cbook.is_hashable(s)
-        lst = ['list', 'of', 'stings']
-        assert not cbook.is_hashable(lst)
 
 
 class Test_delete_masked_points:
@@ -151,7 +145,6 @@ class Test_boxplot_stats:
     def test_results_withlabels(self):
         labels = ['Test1', 2, 'ardvark', 4]
         results = cbook.boxplot_stats(self.data, labels=labels)
-        res = results[0]
         for lab, res in zip(labels, results):
             assert res['label'] == lab
 
@@ -232,26 +225,33 @@ class Test_callback_registry:
                        "callbacks")
 
 
-def test_callbackregistry_default_exception_handler(monkeypatch):
+def test_callbackregistry_default_exception_handler(capsys, monkeypatch):
     cb = cbook.CallbackRegistry()
     cb.connect("foo", lambda: None)
+
     monkeypatch.setattr(
         cbook, "_get_running_interactive_framework", lambda: None)
     with pytest.raises(TypeError):
         cb.process("foo", "argument mismatch")
+    outerr = capsys.readouterr()
+    assert outerr.out == outerr.err == ""
+
     monkeypatch.setattr(
         cbook, "_get_running_interactive_framework", lambda: "not-none")
     cb.process("foo", "argument mismatch")  # No error in that case.
+    outerr = capsys.readouterr()
+    assert outerr.out == ""
+    assert "takes 0 positional arguments but 1 was given" in outerr.err
 
 
 def raising_cb_reg(func):
     class TestException(Exception):
         pass
 
-    def raising_function():
+    def raise_runtime_error():
         raise RuntimeError
 
-    def raising_function_VE():
+    def raise_value_error():
         raise ValueError
 
     def transformer(excp):
@@ -261,15 +261,15 @@ def raising_cb_reg(func):
 
     # old default
     cb_old = cbook.CallbackRegistry(exception_handler=None)
-    cb_old.connect('foo', raising_function)
+    cb_old.connect('foo', raise_runtime_error)
 
     # filter
     cb_filt = cbook.CallbackRegistry(exception_handler=transformer)
-    cb_filt.connect('foo', raising_function)
+    cb_filt.connect('foo', raise_runtime_error)
 
     # filter
     cb_filt_pass = cbook.CallbackRegistry(exception_handler=transformer)
-    cb_filt_pass.connect('foo', raising_function_VE)
+    cb_filt_pass.connect('foo', raise_value_error)
 
     return pytest.mark.parametrize('cb, excp',
                                    [[cb_old, RuntimeError],
@@ -434,9 +434,9 @@ def test_step_fails(args):
 
 
 def test_grouper():
-    class dummy:
+    class Dummy:
         pass
-    a, b, c, d, e = objs = [dummy() for j in range(5)]
+    a, b, c, d, e = objs = [Dummy() for _ in range(5)]
     g = cbook.Grouper()
     g.join(*objs)
     assert set(list(g)[0]) == set(objs)
@@ -454,9 +454,9 @@ def test_grouper():
 
 
 def test_grouper_private():
-    class dummy:
+    class Dummy:
         pass
-    objs = [dummy() for j in range(5)]
+    objs = [Dummy() for _ in range(5)]
     g = cbook.Grouper()
     g.join(*objs)
     # reach in and touch the internals !
@@ -484,13 +484,13 @@ def test_flatiter():
 
 def test_reshape2d():
 
-    class dummy:
+    class Dummy:
         pass
 
     xnew = cbook._reshape_2D([], 'x')
     assert np.shape(xnew) == (1, 0)
 
-    x = [dummy() for j in range(5)]
+    x = [Dummy() for _ in range(5)]
 
     xnew = cbook._reshape_2D(x, 'x')
     assert np.shape(xnew) == (1, 5)
@@ -499,7 +499,7 @@ def test_reshape2d():
     xnew = cbook._reshape_2D(x, 'x')
     assert np.shape(xnew) == (1, 5)
 
-    x = [[dummy() for j in range(5)] for i in range(3)]
+    x = [[Dummy() for _ in range(5)] for _ in range(3)]
     xnew = cbook._reshape_2D(x, 'x')
     assert np.shape(xnew) == (3, 5)
 
@@ -507,6 +507,14 @@ def test_reshape2d():
     x = np.random.rand(3, 5)
     xnew = cbook._reshape_2D(x, 'x')
     assert np.shape(xnew) == (5, 3)
+
+    # Test a list of lists which are all of length 1
+    x = [[1], [2], [3]]
+    xnew = cbook._reshape_2D(x, 'x')
+    assert isinstance(xnew, list)
+    assert isinstance(xnew[0], np.ndarray) and xnew[0].shape == (1,)
+    assert isinstance(xnew[1], np.ndarray) and xnew[1].shape == (1,)
+    assert isinstance(xnew[2], np.ndarray) and xnew[2].shape == (1,)
 
     # Now test with a list of lists with different lengths, which means the
     # array will internally be converted to a 1D object array of lists
@@ -542,6 +550,29 @@ def test_reshape2d():
     # ArraySubclass, which is what used to happen due to a bug in _reshape_2D
     assert len(xnew) == 1
     assert isinstance(xnew[0], ArraySubclass)
+
+    # check list of strings:
+    x = ['a', 'b', 'c', 'c', 'dd', 'e', 'f', 'ff', 'f']
+    xnew = cbook._reshape_2D(x, 'x')
+    assert len(xnew[0]) == len(x)
+    assert isinstance(xnew[0], np.ndarray)
+
+
+def test_reshape2d_pandas(pd):
+    # seperate to allow the rest of the tests to run if no pandas...
+    X = np.arange(30).reshape(10, 3)
+    x = pd.DataFrame(X, columns=["a", "b", "c"])
+    Xnew = cbook._reshape_2D(x, 'x')
+    # Need to check each row because _reshape_2D returns a list of arrays:
+    for x, xnew in zip(X.T, Xnew):
+        np.testing.assert_array_equal(x, xnew)
+
+    X = np.arange(30).reshape(10, 3)
+    x = pd.DataFrame(X, columns=["a", "b", "c"])
+    Xnew = cbook._reshape_2D(x, 'x')
+    # Need to check each row because _reshape_2D returns a list of arrays:
+    for x, xnew in zip(X.T, Xnew):
+        np.testing.assert_array_equal(x, xnew)
 
 
 def test_contiguous_regions():
@@ -588,7 +619,7 @@ def test_delete_parameter():
         with pytest.warns(MatplotlibDeprecationWarning):
             func(foo="bar")
 
-    def pyplot_wrapper(foo=cbook.deprecation._deprecated_parameter):
+    def pyplot_wrapper(foo=_api.deprecation._deprecated_parameter):
         func1(foo)
 
     pyplot_wrapper()  # No warning.
@@ -641,3 +672,97 @@ def test_array_patch_perimeters():
         for rstride, cstride in itertools.product(divisors(rows - 1),
                                                   divisors(cols - 1)):
             check(x, rstride=rstride, cstride=cstride)
+
+
+def test_setattr_cm():
+    class A:
+        cls_level = object()
+        override = object()
+
+        def __init__(self):
+            self.aardvark = 'aardvark'
+            self.override = 'override'
+            self._p = 'p'
+
+        def meth(self):
+            ...
+
+        @classmethod
+        def classy(cls):
+            ...
+
+        @staticmethod
+        def static():
+            ...
+
+        @property
+        def prop(self):
+            return self._p
+
+        @prop.setter
+        def prop(self, val):
+            self._p = val
+
+    class B(A):
+        ...
+
+    other = A()
+
+    def verify_pre_post_state(obj):
+        # When you access a Python method the function is bound
+        # to the object at access time so you get a new instance
+        # of MethodType every time.
+        #
+        # https://docs.python.org/3/howto/descriptor.html#functions-and-methods
+        assert obj.meth is not obj.meth
+        # normal attribute should give you back the same instance every time
+        assert obj.aardvark is obj.aardvark
+        assert a.aardvark == 'aardvark'
+        # and our property happens to give the same instance every time
+        assert obj.prop is obj.prop
+        assert obj.cls_level is A.cls_level
+        assert obj.override == 'override'
+        assert not hasattr(obj, 'extra')
+        assert obj.prop == 'p'
+        assert obj.monkey == other.meth
+        assert obj.cls_level is A.cls_level
+        assert 'cls_level' not in obj.__dict__
+        assert 'classy' not in obj.__dict__
+        assert 'static' not in obj.__dict__
+
+    a = B()
+
+    a.monkey = other.meth
+    verify_pre_post_state(a)
+    with cbook._setattr_cm(
+            a, prop='squirrel',
+            aardvark='moose', meth=lambda: None,
+            override='boo', extra='extra',
+            monkey=lambda: None, cls_level='bob',
+            classy='classy', static='static'):
+        # because we have set a lambda, it is normal attribute access
+        # and the same every time
+        assert a.meth is a.meth
+        assert a.aardvark is a.aardvark
+        assert a.aardvark == 'moose'
+        assert a.override == 'boo'
+        assert a.extra == 'extra'
+        assert a.prop == 'squirrel'
+        assert a.monkey != other.meth
+        assert a.cls_level == 'bob'
+        assert a.classy == 'classy'
+        assert a.static == 'static'
+
+    verify_pre_post_state(a)
+
+
+def test_format_approx():
+    f = cbook._format_approx
+    assert f(0, 1) == '0'
+    assert f(0, 2) == '0'
+    assert f(0, 3) == '0'
+    assert f(-0.0123, 1) == '-0'
+    assert f(1e-7, 5) == '0'
+    assert f(0.0012345600001, 5) == '0.00123'
+    assert f(-0.0012345600001, 5) == '-0.00123'
+    assert f(0.0012345600001, 8) == f(0.0012345600001, 10) == '0.00123456'

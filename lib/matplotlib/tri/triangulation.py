@@ -41,7 +41,7 @@ class Triangulation:
         self.x = np.asarray(x, dtype=np.float64)
         self.y = np.asarray(y, dtype=np.float64)
         if self.x.shape != self.y.shape or self.x.ndim != 1:
-            raise ValueError("x and y must be equal-length 1-D arrays")
+            raise ValueError("x and y must be equal-length 1D arrays")
 
         self.mask = None
         self._edges = None
@@ -166,7 +166,7 @@ class Triangulation:
 
     def get_trifinder(self):
         """
-        Return the default :class:`matplotlib.tri.TriFinder` of this
+        Return the default `matplotlib.tri.TriFinder` of this
         triangulation, creating it if necessary.  This allows the same
         TriFinder object to be easily shared.
         """

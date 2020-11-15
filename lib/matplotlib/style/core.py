@@ -39,26 +39,20 @@ STYLE_BLACKLIST = {
     'webagg.port_retries', 'webagg.open_in_browser', 'backend_fallback',
     'toolbar', 'timezone', 'datapath', 'figure.max_open_warning',
     'figure.raise_window', 'savefig.directory', 'tk.window_focus',
-    'docstring.hardcopy'}
+    'docstring.hardcopy', 'date.epoch'}
 
 
 def _remove_blacklisted_style_params(d, warn=True):
     o = {}
-    for key, val in d.items():
+    for key in d:  # prevent triggering RcParams.__getitem__('backend')
         if key in STYLE_BLACKLIST:
             if warn:
                 cbook._warn_external(
                     "Style includes a parameter, '{0}', that is not related "
                     "to style.  Ignoring".format(key))
         else:
-            o[key] = val
+            o[key] = d[key]
     return o
-
-
-@cbook.deprecated("3.2")
-def is_style_file(filename):
-    """Return True if the filename looks like a style file."""
-    return STYLE_FILE_PATTERN.match(filename) is not None
 
 
 def _apply_style(d, warn=True):
@@ -66,10 +60,16 @@ def _apply_style(d, warn=True):
 
 
 def use(style):
-    """Use matplotlib style settings from a style specification.
+    """
+    Use Matplotlib style settings from a style specification.
 
     The style name of 'default' is reserved for reverting back to
     the default style settings.
+
+    .. note::
+
+       This updates the `.rcParams` with the settings from the style.
+       `.rcParams` not defined in the style are kept.
 
     Parameters
     ----------
@@ -123,7 +123,8 @@ def use(style):
 
 @contextlib.contextmanager
 def context(style, after_reset=False):
-    """Context manager for using style settings temporarily.
+    """
+    Context manager for using style settings temporarily.
 
     Parameters
     ----------
@@ -168,22 +169,11 @@ def iter_user_libraries():
 
 
 def update_user_library(library):
-    """Update style library with user-defined rc files"""
+    """Update style library with user-defined rc files."""
     for stylelib_path in iter_user_libraries():
         styles = read_style_directory(stylelib_path)
         update_nested_dict(library, styles)
     return library
-
-
-@cbook.deprecated("3.2")
-def iter_style_files(style_dir):
-    """Yield file path and name of styles in the given directory."""
-    for path in os.listdir(style_dir):
-        filename = os.path.basename(path)
-        if is_style_file(filename):
-            match = STYLE_FILE_PATTERN.match(filename)
-            path = os.path.abspath(os.path.join(style_dir, path))
-            yield path, match.group(1)
 
 
 def read_style_directory(style_dir):
@@ -199,9 +189,10 @@ def read_style_directory(style_dir):
 
 
 def update_nested_dict(main_dict, new_dict):
-    """Update nested dict (only level of nesting) with new values.
+    """
+    Update nested dict (only level of nesting) with new values.
 
-    Unlike dict.update, this assumes that the values of the parent dict are
+    Unlike `dict.update`, this assumes that the values of the parent dict are
     dicts (or dict-like), so you shouldn't replace the nested dict if it
     already exists. Instead you should update the sub-dict.
     """
@@ -216,11 +207,12 @@ def update_nested_dict(main_dict, new_dict):
 _base_library = load_base_library()
 
 library = None
+
 available = []
 
 
 def reload_library():
-    """Reload style library."""
+    """Reload the style library."""
     global library
     library = update_user_library(_base_library)
     available[:] = sorted(library.keys())

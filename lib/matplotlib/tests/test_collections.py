@@ -1,8 +1,5 @@
-"""
-Tests specific to the collections module.
-"""
 import io
-import platform
+from types import SimpleNamespace
 
 import numpy as np
 from numpy.testing import assert_array_equal, assert_array_almost_equal
@@ -39,8 +36,7 @@ def generate_EventCollection_plot():
                            antialiased=antialiased
                            )
 
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
+    fig, ax = plt.subplots()
     ax.add_collection(coll)
     ax.set_title('EventCollection: default')
     props = {'positions': positions,
@@ -103,7 +99,9 @@ def test__EventCollection__add_positions():
     splt, coll, props = generate_EventCollection_plot()
     new_positions = np.hstack([props['positions'],
                                props['extra_positions'][0]])
+    coll.switch_orientation()  # Test adding in the vertical orientation, too.
     coll.add_positions(props['extra_positions'][0])
+    coll.switch_orientation()
     np.testing.assert_array_equal(new_positions, coll.get_positions())
     check_segments(coll,
                    new_positions,
@@ -334,8 +332,7 @@ def test_barb_limits():
                               decimal=1)
 
 
-@image_comparison(['EllipseCollection_test_image.png'], remove_text=True,
-                  tol={'aarch64': 0.02}.get(platform.machine(), 0.0))
+@image_comparison(['EllipseCollection_test_image.png'], remove_text=True)
 def test_EllipseCollection():
     # Test basic functionality
     fig, ax = plt.subplots()
@@ -368,7 +365,7 @@ def test_polycollection_close():
         [[3., 0.], [3., 1.], [4., 1.], [4., 0.]]]
 
     fig = plt.figure()
-    ax = Axes3D(fig)
+    ax = fig.add_axes(Axes3D(fig))
 
     colors = ['r', 'g', 'b', 'y', 'k']
     zpos = list(range(5))
@@ -430,8 +427,7 @@ def test_regularpolycollection_scale():
     fig, ax = plt.subplots()
 
     xy = [(0, 0)]
-    # Unit square has a half-diagonal of `1 / sqrt(2)`, so `pi * r**2`
-    # equals...
+    # Unit square has a half-diagonal of `1/sqrt(2)`, so `pi * r**2` equals...
     circle_areas = [np.pi / 2]
     squares = SquareCollection(sizes=circle_areas, offsets=xy,
                                transOffset=ax.transData)
@@ -443,14 +439,8 @@ def test_picking():
     fig, ax = plt.subplots()
     col = ax.scatter([0], [0], [1000], picker=True)
     fig.savefig(io.BytesIO(), dpi=fig.dpi)
-
-    class MouseEvent:
-        pass
-    event = MouseEvent()
-    event.x = 325
-    event.y = 240
-
-    found, indices = col.contains(event)
+    mouse_event = SimpleNamespace(x=325, y=240)
+    found, indices = col.contains(mouse_event)
     assert found
     assert_array_equal(indices['ind'], [0])
 
@@ -528,8 +518,7 @@ def test_joinstyle():
 
 @image_comparison(['cap_and_joinstyle.png'])
 def test_cap_and_joinstyle_image():
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1)
+    fig, ax = plt.subplots()
     ax.set_xlim([-0.5, 1.5])
     ax.set_ylim([-0.5, 2.5])
 
@@ -552,9 +541,36 @@ def test_cap_and_joinstyle_image():
 def test_scatter_post_alpha():
     fig, ax = plt.subplots()
     sc = ax.scatter(range(5), range(5), c=range(5))
-    # this needs to be here to update internal state
-    fig.canvas.draw()
     sc.set_alpha(.1)
+
+
+def test_scatter_alpha_array():
+    x = np.arange(5)
+    alpha = x / 5
+    # With colormapping.
+    fig, (ax0, ax1) = plt.subplots(2)
+    sc0 = ax0.scatter(x, x, c=x, alpha=alpha)
+    sc1 = ax1.scatter(x, x, c=x)
+    sc1.set_alpha(alpha)
+    plt.draw()
+    assert_array_equal(sc0.get_facecolors()[:, -1], alpha)
+    assert_array_equal(sc1.get_facecolors()[:, -1], alpha)
+    # Without colormapping.
+    fig, (ax0, ax1) = plt.subplots(2)
+    sc0 = ax0.scatter(x, x, color=['r', 'g', 'b', 'c', 'm'], alpha=alpha)
+    sc1 = ax1.scatter(x, x, color='r', alpha=alpha)
+    plt.draw()
+    assert_array_equal(sc0.get_facecolors()[:, -1], alpha)
+    assert_array_equal(sc1.get_facecolors()[:, -1], alpha)
+    # Without colormapping, and set alpha afterward.
+    fig, (ax0, ax1) = plt.subplots(2)
+    sc0 = ax0.scatter(x, x, color=['r', 'g', 'b', 'c', 'm'])
+    sc0.set_alpha(alpha)
+    sc1 = ax1.scatter(x, x, color='r')
+    sc1.set_alpha(alpha)
+    plt.draw()
+    assert_array_equal(sc0.get_facecolors()[:, -1], alpha)
+    assert_array_equal(sc1.get_facecolors()[:, -1], alpha)
 
 
 def test_pathcollection_legend_elements():
@@ -623,3 +639,109 @@ def test_collection_set_verts_array():
     for ap, lp in zip(col_arr._paths, col_list._paths):
         assert np.array_equal(ap._vertices, lp._vertices)
         assert np.array_equal(ap._codes, lp._codes)
+
+    verts_tuple = np.empty(10, dtype=object)
+    verts_tuple[:] = [tuple(tuple(y) for y in x) for x in verts]
+    col_arr_tuple = PolyCollection(verts_tuple)
+    assert len(col_arr._paths) == len(col_arr_tuple._paths)
+    for ap, atp in zip(col_arr._paths, col_arr_tuple._paths):
+        assert np.array_equal(ap._vertices, atp._vertices)
+        assert np.array_equal(ap._codes, atp._codes)
+
+
+def test_blended_collection_autolim():
+    a = [1, 2, 4]
+    height = .2
+
+    xy_pairs = np.column_stack([np.repeat(a, 2), np.tile([0, height], len(a))])
+    line_segs = xy_pairs.reshape([len(a), 2, 2])
+
+    f, ax = plt.subplots()
+    trans = mtransforms.blended_transform_factory(ax.transData, ax.transAxes)
+    ax.add_collection(LineCollection(line_segs, transform=trans))
+    ax.autoscale_view(scalex=True, scaley=False)
+    np.testing.assert_allclose(ax.get_xlim(), [1., 4.])
+
+
+def test_singleton_autolim():
+    fig, ax = plt.subplots()
+    ax.scatter(0, 0)
+    np.testing.assert_allclose(ax.get_ylim(), [-0.06, 0.06])
+    np.testing.assert_allclose(ax.get_xlim(), [-0.06, 0.06])
+
+
+def test_quadmesh_set_array():
+    x = np.arange(4)
+    y = np.arange(4)
+    z = np.arange(9).reshape((3, 3))
+    fig, ax = plt.subplots()
+    coll = ax.pcolormesh(x, y, np.ones(z.shape))
+    # Test that the collection is able to update with a 2d array
+    coll.set_array(z)
+    fig.canvas.draw()
+    assert np.array_equal(coll.get_array(), z)
+
+    # Check that pre-flattened arrays work too
+    coll.set_array(np.ones(9))
+    fig.canvas.draw()
+    assert np.array_equal(coll.get_array(), np.ones(9))
+
+
+def test_quadmesh_alpha_array():
+    x = np.arange(4)
+    y = np.arange(4)
+    z = np.arange(9).reshape((3, 3))
+    alpha = z / z.max()
+    alpha_flat = alpha.ravel()
+    # Provide 2-D alpha:
+    fig, (ax0, ax1) = plt.subplots(2)
+    coll1 = ax0.pcolormesh(x, y, z, alpha=alpha)
+    coll2 = ax1.pcolormesh(x, y, z)
+    coll2.set_alpha(alpha)
+    plt.draw()
+    assert_array_equal(coll1.get_facecolors()[:, -1], alpha_flat)
+    assert_array_equal(coll2.get_facecolors()[:, -1], alpha_flat)
+    # Or provide 1-D alpha:
+    fig, (ax0, ax1) = plt.subplots(2)
+    coll1 = ax0.pcolormesh(x, y, z, alpha=alpha_flat)
+    coll2 = ax1.pcolormesh(x, y, z)
+    coll2.set_alpha(alpha_flat)
+    plt.draw()
+    assert_array_equal(coll1.get_facecolors()[:, -1], alpha_flat)
+    assert_array_equal(coll2.get_facecolors()[:, -1], alpha_flat)
+
+
+def test_alpha_validation():
+    # Most of the relevant testing is in test_artist and test_colors.
+    fig, ax = plt.subplots()
+    pc = ax.pcolormesh(np.arange(12).reshape((3, 4)))
+    with pytest.raises(ValueError, match="^Data array shape"):
+        pc.set_alpha([0.5, 0.6])
+        pc.update_scalarmappable()
+
+
+def test_legend_inverse_size_label_relationship():
+    """
+    Ensure legend markers scale appropriately when label and size are
+    inversely related.
+    Here label = 5 / size
+    """
+
+    np.random.seed(19680801)
+    X = np.random.random(50)
+    Y = np.random.random(50)
+    C = 1 - np.random.random(50)
+    S = 5 / C
+
+    legend_sizes = [0.2, 0.4, 0.6, 0.8]
+    fig, ax = plt.subplots()
+    sc = ax.scatter(X, Y, s=S)
+    handles, labels = sc.legend_elements(
+      prop='sizes', num=legend_sizes, func=lambda s: 5 / s
+    )
+
+    # Convert markersize scale to 's' scale
+    handle_sizes = [x.get_markersize() for x in handles]
+    handle_sizes = [5 / x**2 for x in handle_sizes]
+
+    assert_array_almost_equal(handle_sizes, legend_sizes, decimal=1)

@@ -6,8 +6,7 @@ Streamline plotting for 2D vector fields.
 import numpy as np
 
 import matplotlib
-import matplotlib.cbook as cbook
-import matplotlib.cm as cm
+from matplotlib import _api, cbook, cm
 import matplotlib.colors as mcolors
 import matplotlib.collections as mcollections
 import matplotlib.lines as mlines
@@ -103,8 +102,8 @@ def streamplot(axes, x, y, u, v, density=1, linewidth=None, color=None,
     line_kw = {}
     arrow_kw = dict(arrowstyle=arrowstyle, mutation_scale=10 * arrowsize)
 
-    cbook._check_in_list(['both', 'forward', 'backward'],
-                         integration_direction=integration_direction)
+    _api.check_in_list(['both', 'forward', 'backward'],
+                       integration_direction=integration_direction)
 
     if integration_direction == 'both':
         maxlength /= 2.
@@ -237,7 +236,8 @@ class StreamplotSet:
             cbook.warn_deprecated(
                 "3.3",
                 message="Passing arbitrary keyword arguments to StreamplotSet "
-                        "is deprecated.")
+                        "is deprecated since %(since) and will become an "
+                        "error %(removal)s.")
         self.lines = lines
         self.arrows = arrows
 
@@ -246,7 +246,8 @@ class StreamplotSet:
 # ========================
 
 class DomainMap:
-    """Map representing different coordinate systems.
+    """
+    Map representing different coordinate systems.
 
     Coordinate definitions:
 
@@ -354,14 +355,15 @@ class Grid:
         return self.ny, self.nx
 
     def within_grid(self, xi, yi):
-        """Return True if point is a valid index of grid."""
+        """Return whether (*xi*, *yi*) is a valid index of the grid."""
         # Note that xi/yi can be floats; so, for example, we can't simply check
         # `xi < self.nx` since *xi* can be `self.nx - 1 < xi < self.nx`
         return 0 <= xi <= self.nx - 1 and 0 <= yi <= self.ny - 1
 
 
 class StreamMask:
-    """Mask to keep track of discrete regions crossed by streamlines.
+    """
+    Mask to keep track of discrete regions crossed by streamlines.
 
     The resolution of this grid determines the approximate spacing between
     trajectories. Streamlines are only allowed to pass through zeroed cells:
@@ -396,7 +398,8 @@ class StreamMask:
             self._mask[t] = 0
 
     def _update_trajectory(self, xm, ym):
-        """Update current trajectory position in mask.
+        """
+        Update current trajectory position in mask.
 
         If the new position has already been filled, raise `InvalidIndexError`.
         """
@@ -446,7 +449,8 @@ def get_integrator(u, v, dmap, minlength, maxlength, integration_direction):
         return -dxi, -dyi
 
     def integrate(x0, y0):
-        """Return x, y grid-coordinates of trajectory based on starting point.
+        """
+        Return x, y grid-coordinates of trajectory based on starting point.
 
         Integrate both forward and backward in time from starting point in
         grid coordinates.
@@ -492,7 +496,8 @@ class OutOfBounds(IndexError):
 
 
 def _integrate_rk12(x0, y0, dmap, f, maxlength):
-    """2nd-order Runge-Kutta algorithm with adaptive step size.
+    """
+    2nd-order Runge-Kutta algorithm with adaptive step size.
 
     This method is also referred to as the improved Euler's method, or Heun's
     method. This method is favored over higher-order methods because:
@@ -658,7 +663,8 @@ def interpgrid(a, xi, yi):
 
 
 def _gen_starting_points(shape):
-    """Yield starting points for streamlines.
+    """
+    Yield starting points for streamlines.
 
     Trying points on the boundary first gives higher quality streamlines.
     This algorithm starts with a point on the mask corner and spirals inward.

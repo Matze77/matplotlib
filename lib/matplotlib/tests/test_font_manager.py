@@ -1,4 +1,4 @@
-from io import BytesIO
+from io import BytesIO, StringIO
 import multiprocessing
 import os
 from pathlib import Path
@@ -105,7 +105,7 @@ def test_utf16m_sfnt():
     else:
         # Check that we successfully read "semibold" from the font's sfnt table
         # and set its weight accordingly.
-        assert entry.weight == "semibold"
+        assert entry.weight == 600
 
 
 def test_find_ttc():
@@ -120,12 +120,26 @@ def test_find_ttc():
 
     fig, ax = plt.subplots()
     ax.text(.5, .5, "\N{KANGXI RADICAL DRAGON}", fontproperties=fp)
-    fig.savefig(BytesIO(), format="raw")
-    fig.savefig(BytesIO(), format="svg")
-    with pytest.raises(RuntimeError):
-        fig.savefig(BytesIO(), format="pdf")
-    with pytest.raises(RuntimeError):
-        fig.savefig(BytesIO(), format="ps")
+    for fmt in ["raw", "svg", "pdf", "ps"]:
+        fig.savefig(BytesIO(), format=fmt)
+
+
+def test_find_invalid(tmpdir):
+    tmp_path = Path(tmpdir)
+
+    with pytest.raises(FileNotFoundError):
+        get_font(tmp_path / 'non-existent-font-name.ttf')
+
+    with pytest.raises(FileNotFoundError):
+        get_font(str(tmp_path / 'non-existent-font-name.ttf'))
+
+    with pytest.raises(FileNotFoundError):
+        get_font(bytes(tmp_path / 'non-existent-font-name.ttf'))
+
+    # Not really public, but get_font doesn't expose non-filename constructor.
+    from matplotlib.ft2font import FT2Font
+    with pytest.raises(TypeError, match='path or binary-mode file'):
+        FT2Font(StringIO())
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='Linux only')
@@ -196,3 +210,15 @@ def test_fork():
     ctx = multiprocessing.get_context("fork")
     with ctx.Pool(processes=2) as pool:
         pool.map(_model_handler, range(2))
+
+
+def test_missing_family(caplog):
+    plt.rcParams["font.sans-serif"] = ["this-font-does-not-exist"]
+    with caplog.at_level("WARNING"):
+        findfont("sans")
+    assert [rec.getMessage() for rec in caplog.records] == [
+        "findfont: Font family ['sans'] not found. "
+        "Falling back to DejaVu Sans.",
+        "findfont: Generic family 'sans' not found because none of the "
+        "following families were found: this-font-does-not-exist",
+    ]

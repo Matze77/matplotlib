@@ -3,6 +3,11 @@
 Usetex Baseline Test
 ====================
 
+A test for :rc:`text.latex.preview`, a deprecated feature which relied
+on the preview.sty LaTeX package to properly align TeX baselines.  This
+feature has been deprecated as Matplotlib's dvi parser now computes baselines
+just as well as preview.sty; this example will be removed together with
+:rc:`text.latex.preview` after the deprecation elapses.
 """
 
 import matplotlib.pyplot as plt
@@ -25,8 +30,10 @@ class LatexPreviewSubplot(maxes.Axes):
         super().__init__(*args, **kwargs)
 
     def draw(self, renderer):
-        with plt.rc_context({"text.latex.preview": self.preview}):
-            super().draw(renderer)
+        from matplotlib import _api  # internal, *do not use*
+        with _api.suppress_matplotlib_deprecation_warning():
+            with plt.rc_context({"text.latex.preview": self.preview}):
+                super().draw(renderer)
 
 
 def test_window_extent(ax, usetex, preview):

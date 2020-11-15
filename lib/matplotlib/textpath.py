@@ -5,7 +5,7 @@ import urllib.parse
 
 import numpy as np
 
-from matplotlib import _text_layout, cbook, dviread, font_manager, rcParams
+from matplotlib import _text_layout, dviread, font_manager, rcParams
 from matplotlib.font_manager import FontProperties, get_font
 from matplotlib.ft2font import LOAD_NO_HINTING, LOAD_TARGET_LIGHT
 from matplotlib.mathtext import MathTextParser
@@ -41,28 +41,10 @@ class TextToPath:
         """
         Return a unique id for the given font and character-code set.
         """
-        return urllib.parse.quote('{}-{}'.format(font.postscript_name, ccode))
-
-    def _get_char_id_ps(self, font, ccode):
-        """
-        Return a unique id for the given font and character-code set (for tex).
-        """
-        ps_name = font.get_ps_font_info()[2]
-        char_id = urllib.parse.quote('%s-%d' % (ps_name, ccode))
-        return char_id
-
-    @cbook.deprecated(
-        "3.1",
-        alternative="font.get_path() and manual translation of the vertices")
-    def glyph_to_path(self, font, currx=0.):
-        """Convert the *font*'s current glyph to a (vertices, codes) pair."""
-        verts, codes = font.get_path()
-        if currx != 0.0:
-            verts[:, 0] += currx
-        return verts, codes
+        return urllib.parse.quote(f"{font.postscript_name}-{ccode:x}")
 
     def get_text_width_height_descent(self, s, prop, ismath):
-        if rcParams['text.usetex']:
+        if ismath == "TeX":
             texmanager = self.get_texmanager()
             fontsize = prop.get_size_in_points()
             w, h, d = texmanager.get_text_width_height_descent(s, fontsize,
@@ -75,8 +57,7 @@ class TextToPath:
         if ismath:
             prop = prop.copy()
             prop.set_size(self.FONT_SCALE)
-
-            width, height, descent, trash, used_characters = \
+            width, height, descent, *_ = \
                 self.mathtext_parser.parse(s, 72, prop)
             return width * scale, height * scale, descent * scale
 
@@ -103,7 +84,7 @@ class TextToPath:
             The text to be converted.
 
         ismath : {False, True, "TeX"}
-            If True, use mathtext parser.  If "TeX", use tex for renderering.
+            If True, use mathtext parser.  If "TeX", use tex for rendering.
 
         Returns
         -------
@@ -168,10 +149,10 @@ class TextToPath:
 
         xpositions = []
         glyph_ids = []
-        for char, (_, x) in zip(s, _text_layout.layout(s, font)):
-            char_id = self._get_char_id(font, ord(char))
+        for item in _text_layout.layout(s, font):
+            char_id = self._get_char_id(font, ord(item.char))
             glyph_ids.append(char_id)
-            xpositions.append(x)
+            xpositions.append(item.x)
             if char_id not in glyph_map:
                 glyph_map_new[char_id] = font.get_path()
 
@@ -264,7 +245,7 @@ class TextToPath:
         # characters into strings.
         for x1, y1, dvifont, glyph, width in page.text:
             font, enc = self._get_ps_font_and_encoding(dvifont.texname)
-            char_id = self._get_char_id_ps(font, glyph)
+            char_id = self._get_char_id(font, glyph)
 
             if char_id not in glyph_map:
                 font.clear()
@@ -349,8 +330,7 @@ class TextPath(Path):
     """
 
     def __init__(self, xy, s, size=None, prop=None,
-                 _interpolation_steps=1, usetex=False,
-                 *args, **kwargs):
+                 _interpolation_steps=1, usetex=False):
         r"""
         Create a path from the text. Note that it simply is a path,
         not an artist. You need to use the `~.PathPatch` (or other artists)
@@ -396,15 +376,7 @@ class TextPath(Path):
         # Circular import.
         from matplotlib.text import Text
 
-        if args or kwargs:
-            cbook.warn_deprecated(
-                "3.1", message="Additional arguments to TextPath used to be "
-                "ignored, but will trigger a TypeError %(removal)s.")
-
-        if prop is None:
-            prop = FontProperties()
-        else:
-            prop = FontProperties._from_any(prop)
+        prop = FontProperties._from_any(prop)
         if size is None:
             size = prop.get_size_in_points()
 

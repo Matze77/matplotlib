@@ -45,12 +45,6 @@ Spectral functions
 
 `stride_windows`
     Get all windows in an array in a memory-efficient manner
-
-`stride_repeat`
-    Repeat an array in a memory-efficient manner
-
-`apply_window`
-    Apply a window along a given axis
 """
 
 import functools
@@ -58,6 +52,7 @@ from numbers import Number
 
 import numpy as np
 
+from matplotlib import _api
 import matplotlib.cbook as cbook
 from matplotlib import docstring
 
@@ -82,63 +77,6 @@ def window_none(x):
     window_hanning : Another window algorithm.
     """
     return x
-
-
-@cbook.deprecated("3.2")
-def apply_window(x, window, axis=0, return_window=None):
-    """
-    Apply the given window to the given 1D or 2D array along the given axis.
-
-    Parameters
-    ----------
-    x : 1D or 2D array or sequence
-        Array or sequence containing the data.
-
-    window : function or array.
-        Either a function to generate a window or an array with length
-        *x*.shape[*axis*]
-
-    axis : int
-        The axis over which to do the repetition.
-        Must be 0 or 1.  The default is 0
-
-    return_window : bool
-        If true, also return the 1D values of the window that was applied
-    """
-    x = np.asarray(x)
-
-    if x.ndim < 1 or x.ndim > 2:
-        raise ValueError('only 1D or 2D arrays can be used')
-    if axis+1 > x.ndim:
-        raise ValueError('axis(=%s) out of bounds' % axis)
-
-    xshape = list(x.shape)
-    xshapetarg = xshape.pop(axis)
-
-    if np.iterable(window):
-        if len(window) != xshapetarg:
-            raise ValueError('The len(window) must be the same as the shape '
-                             'of x for the chosen axis')
-        windowVals = window
-    else:
-        windowVals = window(np.ones(xshapetarg, dtype=x.dtype))
-
-    if x.ndim == 1:
-        if return_window:
-            return windowVals * x, windowVals
-        else:
-            return windowVals * x
-
-    xshapeother = xshape.pop()
-
-    otheraxis = (axis+1) % 2
-
-    windowValsRep = stride_repeat(windowVals, xshapeother, axis=otheraxis)
-
-    if return_window:
-        return windowValsRep * x, windowVals
-    else:
-        return windowValsRep * x
 
 
 def detrend(x, key=None, axis=None):
@@ -293,14 +231,10 @@ def stride_windows(x, n, noverlap=None, axis=0):
     ----------
     x : 1D array or sequence
         Array or sequence containing the data.
-
     n : int
         The number of data points in each window.
-
-    noverlap : int
+    noverlap : int, default: 0 (no overlap)
         The overlap between adjacent windows.
-        Default is 0 (no overlap)
-
     axis : int
         The axis along which the windows will run.
 
@@ -346,69 +280,12 @@ def stride_windows(x, n, noverlap=None, axis=0):
     return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
 
 
-@cbook.deprecated("3.2")
-def stride_repeat(x, n, axis=0):
-    """
-    Repeat the values in an array in a memory-efficient manner.  Array x is
-    stacked vertically n times.
-
-    .. warning::
-
-        It is not safe to write to the output array.  Multiple
-        elements may point to the same piece of memory, so
-        modifying one value may change others.
-
-    Parameters
-    ----------
-    x : 1D array or sequence
-        Array or sequence containing the data.
-
-    n : int
-        The number of time to repeat the array.
-
-    axis : int
-        The axis along which the data will run.
-
-    References
-    ----------
-    `stackoverflow: Repeat NumPy array without replicating data?
-    <http://stackoverflow.com/a/5568169>`_
-    """
-    if axis not in [0, 1]:
-        raise ValueError('axis must be 0 or 1')
-    x = np.asarray(x)
-    if x.ndim != 1:
-        raise ValueError('only 1-dimensional arrays can be used')
-
-    if n == 1:
-        if axis == 0:
-            return np.atleast_2d(x)
-        else:
-            return np.atleast_2d(x).T
-    if n < 1:
-        raise ValueError('n cannot be less than 1')
-
-    # np.lib.stride_tricks.as_strided easily leads to memory corruption for
-    # non integer shape and strides, i.e. n. See #3845.
-    n = int(n)
-
-    if axis == 0:
-        shape = (n, x.size)
-        strides = (0, x.strides[0])
-    else:
-        shape = (x.size, n)
-        strides = (x.strides[0], 0)
-
-    return np.lib.stride_tricks.as_strided(x, shape=shape, strides=strides)
-
-
 def _spectral_helper(x, y=None, NFFT=None, Fs=None, detrend_func=None,
                      window=None, noverlap=None, pad_to=None,
                      sides=None, scale_by_freq=None, mode=None):
     """
-    This is a helper function that implements the commonality between the
-    psd, csd, spectrogram and complex, magnitude, angle, and phase spectrums.
-    It is *NOT* meant to be used outside of mlab and may change at any time.
+    Private helper implementing the common parts between the psd, csd,
+    spectrogram and complex, magnitude, angle, and phase spectrums.
     """
     if y is None:
         # if y is None use x for y
@@ -434,7 +311,7 @@ def _spectral_helper(x, y=None, NFFT=None, Fs=None, detrend_func=None,
 
     if mode is None or mode == 'default':
         mode = 'psd'
-    cbook._check_in_list(
+    _api.check_in_list(
         ['default', 'psd', 'complex', 'magnitude', 'angle', 'phase'],
         mode=mode)
 
@@ -452,7 +329,7 @@ def _spectral_helper(x, y=None, NFFT=None, Fs=None, detrend_func=None,
             sides = 'twosided'
         else:
             sides = 'onesided'
-    cbook._check_in_list(['default', 'onesided', 'twosided'], sides=sides)
+    _api.check_in_list(['default', 'onesided', 'twosided'], sides=sides)
 
     # zero pad x and y up to NFFT if they are shorter than NFFT
     if len(x) < NFFT:
@@ -548,9 +425,8 @@ def _spectral_helper(x, y=None, NFFT=None, Fs=None, detrend_func=None,
 
     if sides == 'twosided':
         # center the frequency range at zero
-        freqs = np.concatenate((freqs[freqcenter:], freqs[:freqcenter]))
-        result = np.concatenate((result[freqcenter:, :],
-                                 result[:freqcenter, :]), 0)
+        freqs = np.roll(freqs, -freqcenter, axis=0)
+        result = np.roll(result, -freqcenter, axis=0)
     elif not pad_to % 2:
         # get the last value correctly, it is negative otherwise
         freqs[-1] *= -1
@@ -565,11 +441,10 @@ def _spectral_helper(x, y=None, NFFT=None, Fs=None, detrend_func=None,
 def _single_spectrum_helper(
         mode, x, Fs=None, window=None, pad_to=None, sides=None):
     """
-    This is a helper function that implements the commonality between the
-    complex, magnitude, angle, and phase spectrums.
-    It is *NOT* meant to be used outside of mlab and may change at any time.
+    Private helper implementing the commonality between the complex, magnitude,
+    angle, and phase spectrums.
     """
-    cbook._check_in_list(['complex', 'magnitude', 'angle', 'phase'], mode=mode)
+    _api.check_in_list(['complex', 'magnitude', 'angle', 'phase'], mode=mode)
 
     if pad_to is None:
         pad_to = len(x)
@@ -592,7 +467,7 @@ def _single_spectrum_helper(
 # Split out these keyword docs so that they can be used elsewhere
 docstring.interpd.update(
     Spectral="""\
-Fs : scalar, default: 2
+Fs : float, default: 2
     The sampling frequency (samples per time unit).  It is used to calculate
     the Fourier frequencies, *freqs*, in cycles per time unit.
 
@@ -632,7 +507,7 @@ NFFT : int, default: 256
     most efficient.  This should *NOT* be used to get zero padding, or the
     scaling of the result will be incorrect; use *pad_to* for this instead.
 
-detrend : {'none', 'mean', 'linear'} or callable, default 'none'
+detrend : {'none', 'mean', 'linear'} or callable, default: 'none'
     The function applied to each segment before fft-ing, designed to remove
     the mean or linear trend.  Unlike in MATLAB, where the *detrend* parameter
     is a vector, in Matplotlib is it a function.  The :mod:`~matplotlib.mlab`
@@ -641,7 +516,7 @@ detrend : {'none', 'mean', 'linear'} or callable, default 'none'
     choose one of the functions: 'none' calls `.detrend_none`. 'mean' calls
     `.detrend_mean`. 'linear' calls `.detrend_linear`.
 
-scale_by_freq : bool, optional, default: True
+scale_by_freq : bool, default: True
     Whether the resulting density values should be scaled by the scaling
     frequency, which gives density in units of Hz^-1.  This allows for
     integration over the returned frequency values.  The default is True for
@@ -672,9 +547,8 @@ def psd(x, NFFT=None, Fs=None, detrend=None, window=None,
 
     %(PSD)s
 
-    noverlap : int
+    noverlap : int, default: 0 (no overlap)
         The number of points of overlap between segments.
-        The default value is 0 (no overlap).
 
     Returns
     -------
@@ -732,9 +606,8 @@ def csd(x, y, NFFT=None, Fs=None, detrend=None, window=None,
 
     %(PSD)s
 
-    noverlap : int
+    noverlap : int, default: 0 (no overlap)
         The number of points of overlap between segments.
-        The default value is 0 (no overlap).
 
     Returns
     -------
@@ -848,10 +721,9 @@ def specgram(x, NFFT=None, Fs=None, detrend=None, window=None,
 
     %(PSD)s
 
-    noverlap : int, optional
-        The number of points of overlap between blocks.  The default
-        value is 128.
-    mode : str, optional, default: 'psd'
+    noverlap : int, default: 128
+        The number of points of overlap between blocks.
+    mode : str, default: 'psd'
         What sort of spectrum to use:
             'psd'
                 Returns the power spectral density.
@@ -867,7 +739,7 @@ def specgram(x, NFFT=None, Fs=None, detrend=None, window=None,
     Returns
     -------
     spectrum : array-like
-        2-D array, columns are the periodograms of successive segments.
+        2D array, columns are the periodograms of successive segments.
 
     freqs : array-like
         1-D array, frequencies corresponding to the rows in *spectrum*.
@@ -931,16 +803,15 @@ def cohere(x, y, NFFT=256, Fs=2, detrend=detrend_none, window=window_hanning,
 
     %(PSD)s
 
-    noverlap : int
-        The number of points of overlap between blocks.  The default value
-        is 0 (no overlap).
+    noverlap : int, default: 0 (no overlap)
+        The number of points of overlap between segments.
 
     Returns
     -------
-    The return value is the tuple (*Cxy*, *f*), where *f* are the
-    frequencies of the coherence vector. For cohere, scaling the
-    individual densities by the sampling frequency has no effect,
-    since the factors cancel out.
+    Cxy : 1-D array
+        The coherence vector.
+    freqs : 1-D array
+            The frequencies for the elements in *Cxy*.
 
     See Also
     --------
@@ -970,7 +841,7 @@ class GaussianKDE:
     ----------
     dataset : array-like
         Datapoints to estimate from. In case of univariate data this is a 1-D
-        array, otherwise a 2-D array with shape (# of dims, # of data).
+        array, otherwise a 2D array with shape (# of dims, # of data).
 
     bw_method : str, scalar or callable, optional
         The method used to calculate the estimator bandwidth.  This can be
@@ -1066,7 +937,8 @@ class GaussianKDE:
     covariance_factor = scotts_factor
 
     def evaluate(self, points):
-        """Evaluate the estimated pdf on a set of points.
+        """
+        Evaluate the estimated pdf on a set of points.
 
         Parameters
         ----------

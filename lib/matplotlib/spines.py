@@ -1,7 +1,7 @@
 import numpy as np
 
 import matplotlib
-from matplotlib import cbook, docstring, rcParams
+from matplotlib import _api, cbook, docstring, rcParams
 from matplotlib.artist import allow_rasterization
 import matplotlib.transforms as mtransforms
 import matplotlib.patches as mpatches
@@ -82,7 +82,7 @@ class Spine(mpatches.Patch):
         # Note: This cannot be calculated until this is added to an Axes
         self._patch_transform = mtransforms.IdentityTransform()
 
-    @cbook.deprecated("3.2")
+    @_api.deprecated("3.2")
     def set_smart_bounds(self, value):
         """Set the spine and associated axis to have smart bounds."""
         self._smart_bounds = value
@@ -94,7 +94,7 @@ class Spine(mpatches.Patch):
             self.axes.xaxis.set_smart_bounds(value)
         self.stale = True
 
-    @cbook.deprecated("3.2")
+    @_api.deprecated("3.2")
     def get_smart_bounds(self):
         """Return whether the spine has smart bounds."""
         return self._smart_bounds
@@ -228,14 +228,18 @@ class Spine(mpatches.Patch):
         """
         self.axis = axis
         if self.axis is not None:
-            self.axis.cla()
+            self.axis.clear()
         self.stale = True
 
-    def cla(self):
+    def clear(self):
         """Clear the current spine."""
         self._position = None  # clear position
         if self.axis is not None:
-            self.axis.cla()
+            self.axis.clear()
+
+    @_api.deprecated("3.4", alternative="Spine.clear()")
+    def cla(self):
+        self.clear()
 
     def _adjust_location(self):
         """Automatically set spine bounds to the view interval."""
@@ -400,8 +404,8 @@ class Spine(mpatches.Patch):
                 position = ('data', 0)
         assert len(position) == 2, 'position should be 2-tuple'
         position_type, amount = position
-        cbook._check_in_list(['axes', 'outward', 'data'],
-                             position_type=position_type)
+        _api.check_in_list(['axes', 'outward', 'data'],
+                           position_type=position_type)
         if self.spine_type in ['left', 'right']:
             base_transform = self.axes.get_yaxis_transform(which='grid')
         elif self.spine_type in ['top', 'bottom']:

@@ -20,7 +20,7 @@ Classes
 
    BoundaryNorm
    Colormap
-   DivergingNorm
+   CenteredNorm
    LightSource
    LinearSegmentedColormap
    ListedColormap
@@ -47,5 +47,4 @@ Functions
    to_rgba_array
    is_color_like
    same_color
-   makeMappingArray
    get_named_colors_mapping

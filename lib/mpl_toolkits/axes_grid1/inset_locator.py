@@ -96,15 +96,14 @@ class AnchoredSizeLocator(AnchoredLocatorBase):
         self.y_size = Size.from_any(y_size)
 
     def get_extent(self, renderer):
-        x, y, w, h = self.get_bbox_to_anchor().bounds
-
+        bbox = self.get_bbox_to_anchor()
         dpi = renderer.points_to_pixels(72.)
 
         r, a = self.x_size.get_size(renderer)
-        width = w * r + a * dpi
-
+        width = bbox.width * r + a * dpi
         r, a = self.y_size.get_size(renderer)
-        height = h * r + a * dpi
+        height = bbox.height * r + a * dpi
+
         xd, yd = 0, 0
 
         fontsize = renderer.points_to_pixels(self.prop.get_size_in_points())
@@ -120,21 +119,18 @@ class AnchoredZoomLocator(AnchoredLocatorBase):
                  bbox_transform=None):
         self.parent_axes = parent_axes
         self.zoom = zoom
-
         if bbox_to_anchor is None:
             bbox_to_anchor = parent_axes.bbox
-
         super().__init__(
             bbox_to_anchor, None, loc, borderpad=borderpad,
             bbox_transform=bbox_transform)
 
     def get_extent(self, renderer):
-        bb = TransformedBbox(self.axes.viewLim,
-                             self.parent_axes.transData)
-        x, y, w, h = bb.bounds
+        bb = TransformedBbox(self.axes.viewLim, self.parent_axes.transData)
         fontsize = renderer.points_to_pixels(self.prop.get_size_in_points())
         pad = self.pad * fontsize
-        return (abs(w * self.zoom) + 2 * pad, abs(h * self.zoom) + 2 * pad,
+        return (abs(bb.width * self.zoom) + 2 * pad,
+                abs(bb.height * self.zoom) + 2 * pad,
                 pad, pad)
 
 
@@ -158,7 +154,7 @@ class BboxPatch(Patch):
             raise ValueError("transform should not be set")
 
         kwargs["transform"] = IdentityTransform()
-        Patch.__init__(self, **kwargs)
+        super().__init__(**kwargs)
         self.bbox = bbox
 
     def get_path(self):
@@ -281,10 +277,10 @@ class BboxConnector(Patch):
 
         kwargs["transform"] = IdentityTransform()
         if 'fill' in kwargs:
-            Patch.__init__(self, **kwargs)
+            super().__init__(**kwargs)
         else:
             fill = bool({'fc', 'facecolor', 'color'}.intersection(kwargs))
-            Patch.__init__(self, fill=fill, **kwargs)
+            super().__init__(fill=fill, **kwargs)
         self.bbox1 = bbox1
         self.bbox2 = bbox2
         self.loc1 = loc1
@@ -337,7 +333,7 @@ class BboxConnectorPatch(BboxConnector):
         """
         if "transform" in kwargs:
             raise ValueError("transform should not be set")
-        BboxConnector.__init__(self, bbox1, bbox2, loc1a, loc2a, **kwargs)
+        super().__init__(bbox1, bbox2, loc1a, loc2a, **kwargs)
         self.loc1b = loc1b
         self.loc2b = loc2b
 
@@ -408,7 +404,7 @@ def inset_axes(parent_axes, width, height, loc='upper right',
         are relative to the parent_axes. Otherwise they are to be understood
         relative to the bounding box provided via *bbox_to_anchor*.
 
-    loc : int or str, optional, default: 1
+    loc : int or str, default: 1
         Location to place the inset axes. The valid locations are::
 
             'upper right'  : 1,
@@ -455,7 +451,7 @@ def inset_axes(parent_axes, width, height, loc='upper right',
 
         %(Axes)s
 
-    borderpad : float, optional, default: 0.5
+    borderpad : float, default: 0.5
         Padding between inset axes and the bbox_to_anchor.
         The units are axes font size, i.e. for a default font size of 10 points
         *borderpad = 0.5* is equivalent to a padding of 5 points.
@@ -487,8 +483,8 @@ def inset_axes(parent_axes, width, height, loc='upper right',
     if bbox_to_anchor is None:
         bbox_to_anchor = parent_axes.bbox
 
-    if isinstance(bbox_to_anchor, tuple) and \
-        (isinstance(width, str) or isinstance(height, str)):
+    if (isinstance(bbox_to_anchor, tuple) and
+            (isinstance(width, str) or isinstance(height, str))):
         if len(bbox_to_anchor) != 4:
             raise ValueError("Using relative units for width or height "
                              "requires to provide a 4-tuple or a "
@@ -527,7 +523,7 @@ def zoomed_inset_axes(parent_axes, zoom, loc='upper right',
         coordinates (i.e., "zoomed in"), while *zoom* < 1 will shrink the
         coordinates (i.e., "zoomed out").
 
-    loc : int or str, optional, default: 'upper right'
+    loc : int or str, default: 'upper right'
         Location to place the inset axes. The valid locations are::
 
             'upper right'  : 1,
@@ -573,7 +569,7 @@ def zoomed_inset_axes(parent_axes, zoom, loc='upper right',
 
         %(Axes)s
 
-    borderpad : float, optional, default: 0.5
+    borderpad : float, default: 0.5
         Padding between inset axes and the bbox_to_anchor.
         The units are axes font size, i.e. for a default font size of 10 points
         *borderpad = 0.5* is equivalent to a padding of 5 points.

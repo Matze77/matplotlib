@@ -14,13 +14,12 @@ import matplotlib.pyplot as plt
 import mpl_toolkits.axisartist.angle_helper as angle_helper
 from matplotlib.projections import PolarAxes
 from matplotlib.transforms import Affine2D
-from mpl_toolkits.axisartist import SubplotHost
+from mpl_toolkits.axisartist import HostAxes
 from mpl_toolkits.axisartist import GridHelperCurveLinear
 
 
 def curvelinear_test2(fig):
-    """Polar projection, but in a rectangular box.
-    """
+    """Polar projection, but in a rectangular box."""
     # see demo_curvelinear_grid.py for details
     tr = Affine2D().scale(np.pi / 180., 1.) + PolarAxes.PolarTransform()
 
@@ -43,9 +42,7 @@ def curvelinear_test2(fig):
                                         tick_formatter1=tick_formatter1
                                         )
 
-    ax1 = SubplotHost(fig, 1, 1, 1, grid_helper=grid_helper)
-
-    fig.add_subplot(ax1)
+    ax1 = fig.add_subplot(axes_class=HostAxes, grid_helper=grid_helper)
 
     # Now creates floating axis
 

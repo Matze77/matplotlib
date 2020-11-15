@@ -5,7 +5,7 @@ Event handling and picking
 **************************
 
 Matplotlib works with a number of user interface toolkits (wxpython,
-tkinter, qt4, gtk, and macosx) and in order to support features like
+tkinter, qt, gtk, and macosx) and in order to support features like
 interactive panning and zooming of figures, it is helpful to the
 developers to have an API for interacting with the figure via key
 presses and mouse movements that is "GUI neutral" so we don't have to
@@ -58,18 +58,18 @@ disconnect the callback, just call::
 Here are the events that you can connect to, the class instances that
 are sent back to you when the event occurs, and the event descriptions:
 
-
 ====================== ================ ======================================
 Event name             Class            Description
 ====================== ================ ======================================
 'button_press_event'   `.MouseEvent`    mouse button is pressed
 'button_release_event' `.MouseEvent`    mouse button is released
-'close_event'          `.CloseEvent`    a figure is closed
-'draw_event'           `.DrawEvent`     canvas draw (but before screen update)
+'close_event'          `.CloseEvent`    figure is closed
+'draw_event'           `.DrawEvent`     canvas has been drawn (but screen
+                                        widget not updated yet)
 'key_press_event'      `.KeyEvent`      key is pressed
 'key_release_event'    `.KeyEvent`      key is released
-'motion_notify_event'  `.MouseEvent`    mouse motion
-'pick_event'           `.PickEvent`     an object in the canvas is selected
+'motion_notify_event'  `.MouseEvent`    mouse moves
+'pick_event'           `.PickEvent`     artist in the canvas is selected
 'resize_event'         `.ResizeEvent`   figure canvas is resized
 'scroll_event'         `.MouseEvent`    mouse scroll wheel is rolled
 'figure_enter_event'   `.LocationEvent` mouse enters a new figure

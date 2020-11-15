@@ -4,6 +4,7 @@
 
 import numpy as np
 
+import matplotlib.transforms as mtransforms
 from matplotlib import (
     artist, lines as mlines, axis as maxis, patches as mpatches, rcParams)
 from . import art3d, proj3d
@@ -59,35 +60,50 @@ class Axis(maxis.XAxis):
         # Do not depend on this existing in future releases!
         self._axinfo = self._AXINFO[adir].copy()
         if rcParams['_internal.classic_mode']:
-            self._axinfo.update(
-                {'label': {'va': 'center',
-                           'ha': 'center'},
-                 'tick': {'inward_factor': 0.2,
-                          'outward_factor': 0.1,
-                          'linewidth': rcParams['lines.linewidth']},
-                 'axisline': {'linewidth': 0.75,
-                              'color': (0, 0, 0, 1)},
-                 'grid': {'color': (0.9, 0.9, 0.9, 1),
-                          'linewidth': 1.0,
-                          'linestyle': '-'},
-                 })
+            self._axinfo.update({
+                'label': {'va': 'center', 'ha': 'center'},
+                'tick': {
+                    'inward_factor': 0.2,
+                    'outward_factor': 0.1,
+                    'linewidth': {
+                        True: rcParams['lines.linewidth'],  # major
+                        False: rcParams['lines.linewidth'],  # minor
+                    }
+                },
+                'axisline': {'linewidth': 0.75, 'color': (0, 0, 0, 1)},
+                'grid': {
+                    'color': (0.9, 0.9, 0.9, 1),
+                    'linewidth': 1.0,
+                    'linestyle': '-',
+                },
+            })
         else:
-            self._axinfo.update(
-                {'label': {'va': 'center',
-                           'ha': 'center'},
-                 'tick': {'inward_factor': 0.2,
-                          'outward_factor': 0.1,
-                          'linewidth': rcParams.get(
-                              adir + 'tick.major.width',
-                              rcParams['xtick.major.width'])},
-                 'axisline': {'linewidth': rcParams['axes.linewidth'],
-                              'color': rcParams['axes.edgecolor']},
-                 'grid': {'color': rcParams['grid.color'],
-                          'linewidth': rcParams['grid.linewidth'],
-                          'linestyle': rcParams['grid.linestyle']},
-                 })
+            self._axinfo.update({
+                'label': {'va': 'center', 'ha': 'center'},
+                'tick': {
+                    'inward_factor': 0.2,
+                    'outward_factor': 0.1,
+                    'linewidth': {
+                        True: (  # major
+                            rcParams['xtick.major.width'] if adir in 'xz' else
+                            rcParams['ytick.major.width']),
+                        False: (  # minor
+                            rcParams['xtick.minor.width'] if adir in 'xz' else
+                            rcParams['ytick.minor.width']),
+                    }
+                },
+                'axisline': {
+                    'linewidth': rcParams['axes.linewidth'],
+                    'color': rcParams['axes.edgecolor'],
+                },
+                'grid': {
+                    'color': rcParams['grid.color'],
+                    'linewidth': rcParams['grid.linewidth'],
+                    'linestyle': rcParams['grid.linestyle'],
+                },
+            })
 
-        maxis.XAxis.__init__(self, axes, *args, **kwargs)
+        super().__init__(axes, *args, **kwargs)
 
         # data and viewing intervals for this direction
         self.d_interval = d_intervalx
@@ -118,13 +134,19 @@ class Axis(maxis.XAxis):
         self.offsetText._transform = self.axes.transData
 
     def get_major_ticks(self, numticks=None):
-        ticks = maxis.XAxis.get_major_ticks(self, numticks)
+        ticks = super().get_major_ticks(numticks)
         for t in ticks:
-            t.tick1line.set_transform(self.axes.transData)
-            t.tick2line.set_transform(self.axes.transData)
-            t.gridline.set_transform(self.axes.transData)
-            t.label1.set_transform(self.axes.transData)
-            t.label2.set_transform(self.axes.transData)
+            for obj in [
+                    t.tick1line, t.tick2line, t.gridline, t.label1, t.label2]:
+                obj.set_transform(self.axes.transData)
+        return ticks
+
+    def get_minor_ticks(self, numticks=None):
+        ticks = super().get_minor_ticks(numticks)
+        for t in ticks:
+            for obj in [
+                    t.tick1line, t.tick2line, t.gridline, t.label1, t.label2]:
+                obj.set_transform(self.axes.transData)
         return ticks
 
     def set_pane_pos(self, xys):
@@ -167,7 +189,7 @@ class Axis(maxis.XAxis):
         maxs = maxs + deltas / 4.
 
         vals = mins[0], maxs[0], mins[1], maxs[1], mins[2], maxs[2]
-        tc = self.axes.tunit_cube(vals, renderer.M)
+        tc = self.axes.tunit_cube(vals, self.axes.M)
         avgz = [tc[p1][2] + tc[p2][2] + tc[p3][2] + tc[p4][2]
                 for p1, p2, p3, p4 in self._PLANES]
         highs = np.array([avgz[2*i] < avgz[2*i+1] for i in range(3)])
@@ -215,8 +237,8 @@ class Axis(maxis.XAxis):
         edgep2 = edgep1.copy()
         edgep2[juggled[1]] = maxmin[juggled[1]]
         pep = np.asarray(
-            proj3d.proj_trans_points([edgep1, edgep2], renderer.M))
-        centpt = proj3d.proj_transform(*centers, renderer.M)
+            proj3d.proj_trans_points([edgep1, edgep2], self.axes.M))
+        centpt = proj3d.proj_transform(*centers, self.axes.M)
         self.line.set_data(pep[0], pep[1])
         self.line.draw(renderer)
 
@@ -248,7 +270,7 @@ class Axis(maxis.XAxis):
         axmask = [True, True, True]
         axmask[index] = False
         lxyz = move_from_center(lxyz, centers, labeldeltas, axmask)
-        tlx, tly, tlz = proj3d.proj_transform(*lxyz, renderer.M)
+        tlx, tly, tlz = proj3d.proj_transform(*lxyz, self.axes.M)
         self.label.set_position((tlx, tly))
         if self.get_rotate_label(self.label.get_text()):
             angle = art3d._norm_text_angle(np.rad2deg(np.arctan2(dy, dx)))
@@ -269,7 +291,7 @@ class Axis(maxis.XAxis):
             outerindex = 1
 
         pos = move_from_center(outeredgep, centers, labeldeltas, axmask)
-        olx, oly, olz = proj3d.proj_transform(*pos, renderer.M)
+        olx, oly, olz = proj3d.proj_transform(*pos, self.axes.M)
         self.offsetText.set_text(self.major.formatter.get_offset())
         self.offsetText.set_position((olx, oly))
         angle = art3d._norm_text_angle(np.rad2deg(np.arctan2(dy, dx)))
@@ -352,11 +374,11 @@ class Axis(maxis.XAxis):
             pos[tickdir] = (
                 edgep1[tickdir]
                 + info['tick']['outward_factor'] * ticksign * tickdelta)
-            x1, y1, z1 = proj3d.proj_transform(*pos, renderer.M)
+            x1, y1, z1 = proj3d.proj_transform(*pos, self.axes.M)
             pos[tickdir] = (
                 edgep1[tickdir]
                 - info['tick']['inward_factor'] * ticksign * tickdelta)
-            x2, y2, z2 = proj3d.proj_transform(*pos, renderer.M)
+            x2, y2, z2 = proj3d.proj_transform(*pos, self.axes.M)
 
             # Get position of label
             default_offset = 8.  # A rough estimate
@@ -367,21 +389,63 @@ class Axis(maxis.XAxis):
             axmask[index] = False
             pos[tickdir] = edgep1[tickdir]
             pos = move_from_center(pos, centers, labeldeltas, axmask)
-            lx, ly, lz = proj3d.proj_transform(*pos, renderer.M)
+            lx, ly, lz = proj3d.proj_transform(*pos, self.axes.M)
 
             tick_update_position(tick, (x1, x2), (y1, y2), (lx, ly))
-            tick.tick1line.set_linewidth(info['tick']['linewidth'])
+            tick.tick1line.set_linewidth(
+                info['tick']['linewidth'][tick._major])
             tick.draw(renderer)
 
         renderer.close_group('axis3d')
         self.stale = False
 
-    # TODO: Get this to work properly when mplot3d supports
-    #       the transforms framework.
-    def get_tightbbox(self, renderer):
-        # Currently returns None so that Axis.get_tightbbox
-        # doesn't return junk info.
-        return None
+    # TODO: Get this to work (more) properly when mplot3d supports the
+    #       transforms framework.
+    def get_tightbbox(self, renderer, *, for_layout_only=False):
+        # inherited docstring
+        if not self.get_visible():
+            return
+        # We have to directly access the internal data structures
+        # (and hope they are up to date) because at draw time we
+        # shift the ticks and their labels around in (x, y) space
+        # based on the projection, the current view port, and their
+        # position in 3D space.  If we extend the transforms framework
+        # into 3D we would not need to do this different book keeping
+        # than we do in the normal axis
+        major_locs = self.get_majorticklocs()
+        minor_locs = self.get_minorticklocs()
+
+        ticks = [*self.get_minor_ticks(len(minor_locs)),
+                 *self.get_major_ticks(len(major_locs))]
+        view_low, view_high = self.get_view_interval()
+        if view_low > view_high:
+            view_low, view_high = view_high, view_low
+        interval_t = self.get_transform().transform([view_low, view_high])
+
+        ticks_to_draw = []
+        for tick in ticks:
+            try:
+                loc_t = self.get_transform().transform(tick.get_loc())
+            except AssertionError:
+                # Transform.transform doesn't allow masked values but
+                # some scales might make them, so we need this try/except.
+                pass
+            else:
+                if mtransforms._interval_contains_close(interval_t, loc_t):
+                    ticks_to_draw.append(tick)
+
+        ticks = ticks_to_draw
+
+        bb_1, bb_2 = self._get_tick_bboxes(ticks, renderer)
+        other = []
+
+        if self.line.get_visible():
+            other.append(self.line.get_window_extent(renderer))
+        if (self.label.get_visible() and not for_layout_only and
+                self.label.get_text()):
+            other.append(self.label.get_window_extent(renderer))
+
+        return mtransforms.Bbox.union([*bb_1, *bb_2, *other])
 
     @property
     def d_interval(self):

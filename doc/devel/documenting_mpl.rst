@@ -47,39 +47,59 @@ documentation built into their comments.
   :file:`doc/api/api_changes/`).  Sphinx_ regenerates files in these
   directories when building documentation.
 
-Installing dependencies
------------------------
+Setting up the doc build
+------------------------
 
 The documentation for Matplotlib is generated from reStructuredText (ReST_)
 using the Sphinx_ documentation generation tool. To build the documentation
-you will need to (1) set up an appropriate Python environment and (2)
-separately install LaTeX and Graphviz.
+you will need to
 
-To (1) set up an appropriate Python environment for building the
-documentation, you should:
+1. set up an appropriate Python environment
+2. install additional external dependencies
 
-*  create a clean virtual environment with no existing Matplotlib
-   installation
+Setting up a dedicated Python environment
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*  create a clean virtual environment with no existing Matplotlib installation
 *  install the Python packages required for Matplotlib
-*  install the additional Python packages required to build the documentation
+*  install the additional Python packages required to build the documentation.
+   They are listed in :file:`doc-requirements.txt`, which is shown below:
 
-There are several extra python packages that are needed to build the
-documentation. They are listed in :file:`doc-requirements.txt`, which is
-shown below:
+   .. include:: ../../requirements/doc/doc-requirements.txt
+      :literal:
 
-.. include:: ../../requirements/doc/doc-requirements.txt
-   :literal:
+.. note::
 
-To (2) set up LaTeX and Graphviz dependencies you should:
+  If you've already set up an
+  :ref:`environment for Matplotlib development <installing_for_devs>`, you
+  can reuse that and skip the first two steps.
 
-*  install a minimal working LaTeX distribution
-*  install the LaTeX packages cm-super and dvipng
-*  install `Graphviz <http://www.graphviz.org/download>`_
+Install additional external dependencies
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Required:
+
+*  a minimal working LaTeX distribution
+*  `Graphviz <http://www.graphviz.org/download>`_
+*  the LaTeX packages *cm-super* and *dvipng*. If your OS bundles ``TexLive``,
+   then often the "complete" version of the installer will automatically include
+   these packages (e.g. "texlive-full" or "texlive-all").
+
+Optional, but recommended:
+
+*  `Inkscape <https://inkscape.org>`_
+*  `optipng <http://optipng.sourceforge.net>`_
+*  the font "Humor Sans" (aka the "XKCD" font), or the free alternative
+   `Comic Neue <http://comicneue.com/>`_.
+*  the font "Times New Roman"
 
 .. note::
 
   The documentation will not build without LaTeX and Graphviz.  These are not
-  Python packages and must be installed separately.
+  Python packages and must be installed separately. The documentation can be
+  built without Inkscape and optipng, but the build process will raise various
+  warnings. If the build process warns that you are missing fonts, make sure
+  your LaTeX distribution bundles cm-super or install it separately.
 
 Building the docs
 -----------------
@@ -112,6 +132,12 @@ it, use
 
    make SPHINXOPTS= html
 
+On Windows the arguments must be at the end of the statement:
+
+.. code-block:: bat
+
+   make html SPHINXOPTS=
+
 You can use the ``O`` variable to set additional options:
 
 * ``make O=-j4 html`` runs a parallel build with 4 processes.
@@ -121,8 +147,12 @@ You can use the ``O`` variable to set additional options:
 Multiple options can be combined using e.g. ``make O='-j4 -Dplot_gallery=0'
 html``.
 
-On Windows, options needs to be set as environment variables, e.g. ``set O=-W
---keep-going -j4 & make html``.
+On Windows, either use the format shown above or set options as environment variables, e.g.:
+
+.. code-block:: bat
+
+   set O=-W --keep-going -j4
+   make html
 
 .. _writing-rest-pages:
 
@@ -289,12 +319,14 @@ Other packages can also be linked via
   `numpy.mean`
 
 will return this link: `numpy.mean`.  This works for Python, Numpy, Scipy,
-and Pandas (full list is in :file:`doc/conf.py`). Sometimes it is tricky
-to get external Sphinx linking to work; to
-check that a something exists to link to the following shell command outputs
-a list of all objects that can be referenced (in this case for Numpy)::
+and Pandas (full list is in :file:`doc/conf.py`).  If external linking fails,
+you can check the full list of referenceable objects with the following
+commands::
 
+  python -m sphinx.ext.intersphinx 'https://docs.python.org/3/objects.inv'
   python -m sphinx.ext.intersphinx 'https://docs.scipy.org/doc/numpy/objects.inv'
+  python -m sphinx.ext.intersphinx 'https://docs.scipy.org/doc/scipy/reference/objects.inv'
+  python -m sphinx.ext.intersphinx 'https://pandas.pydata.org/pandas-docs/stable/objects.inv'
 
 .. _rst-figures-and-includes:
 
@@ -302,12 +334,12 @@ Including figures and files
 ---------------------------
 
 Image files can directly included in pages with the ``image::`` directive.
-e.g., :file:`users/navigation_toolbar.rst` displays the toolbar icons
-with a call to a static image::
+e.g., :file:`thirdpartypackages/index.rst` displays the images for the third-party
+packages as static images::
 
-    .. image:: ../_static/toolbar.png
+    .. image:: /_static/toolbar.png
 
-as rendered on the page: :ref:`navigation-toolbar`.
+as rendered on the page: :ref:`thirdparty-index`.
 
 Files can be included verbatim.  For instance the ``matplotlibrc`` file
 is important for customizing Matplotlib, and is included verbatim in the
@@ -404,6 +436,22 @@ Formatting conventions
 The basic docstring conventions are covered in the `numpydoc docstring guide`_
 and the Sphinx_ documentation.  Some Matplotlib-specific formatting conventions
 to keep in mind:
+
+Quote positions
+~~~~~~~~~~~~~~~
+The quotes for single line docstrings are on the same line (pydocstyle D200)::
+
+    def get_linewidth(self):
+        """Return the line width in points."""
+
+The quotes for multi-line docstrings are on separate lines (pydocstyle D213)::
+
+        def set_linestyle(self, ls):
+        """
+        Set the linestyle of the line.
+
+        [...]
+        """
 
 Function arguments
 ~~~~~~~~~~~~~~~~~~
@@ -659,7 +707,7 @@ are:
    are updated automatically.
 
 The function `matplotlib.artist.kwdoc` and the decorator
-`matplotlib.docstring.dedent_interpd` facilitate this.  They combine Python
+``matplotlib.docstring.dedent_interpd`` facilitate this.  They combine Python
 string interpolation in the docstring with the Matplotlib artist introspection
 facility that underlies ``setp`` and ``getp``.  The ``kwdoc`` function gives
 the list of properties as a docstring. In order to use this in another
@@ -872,7 +920,9 @@ Miscellaneous
 Adding animations
 -----------------
 
-There is a Matplotlib Google/Gmail account with username ``mplgithub``
+Animations are scraped automatically by Sphinx-gallery. If this is not
+desired,
+there is also a Matplotlib Google/Gmail account with username ``mplgithub``
 which was used to setup the github account but can be used for other
 purposes, like hosting Google docs or Youtube videos.  You can embed a
 Matplotlib animation in the docs by first saving the animation as a

@@ -1,8 +1,13 @@
 """
-===============
-Demo Agg Filter
-===============
+==========
+AGG filter
+==========
 
+Most pixel-based backends in Matplotlib use `Anti-Grain Geometry (AGG)`_ for
+rendering. You can modify the rendering of Artists by applying a filter via
+`.Artist.set_agg_filter`.
+
+.. _Anti-Grain Geometry (AGG): http://antigrain.com
 """
 
 import matplotlib.cm as cm
@@ -170,7 +175,7 @@ def filtered_text(ax):
 
     # contour label
     cl = ax.clabel(CS, levels[1::2],  # label every second level
-                   inline=1,
+                   inline=True,
                    fmt='%1.1f',
                    fontsize=11)
 

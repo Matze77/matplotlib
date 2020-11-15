@@ -57,7 +57,7 @@ def __prepare_fancyarrow_dpi_cor_test():
     NB: this function *is not* a test in itself!
     """
     fig2 = plt.figure("fancyarrow_dpi_cor_test", figsize=(4, 3), dpi=50)
-    ax = fig2.add_subplot(111)
+    ax = fig2.add_subplot()
     ax.set_xlim([0, 1])
     ax.set_ylim([0, 1])
     ax.add_patch(mpatches.FancyArrowPatch(posA=(0.3, 0.4), posB=(0.8, 0.6),
@@ -67,7 +67,7 @@ def __prepare_fancyarrow_dpi_cor_test():
 
 
 @image_comparison(['fancyarrow_dpi_cor_100dpi.png'], remove_text=True,
-                  tol={'aarch64': 0.02}.get(platform.machine(), 0.0),
+                  tol=0 if platform.machine() == 'x86_64' else 0.02,
                   savefig_kwarg=dict(dpi=100))
 def test_fancyarrow_dpi_cor_100dpi():
     """
@@ -82,7 +82,7 @@ def test_fancyarrow_dpi_cor_100dpi():
 
 
 @image_comparison(['fancyarrow_dpi_cor_200dpi.png'], remove_text=True,
-                  tol={'aarch64': 0.02}.get(platform.machine(), 0.0),
+                  tol=0 if platform.machine() == 'x86_64' else 0.02,
                   savefig_kwarg=dict(dpi=200))
 def test_fancyarrow_dpi_cor_200dpi():
     """

@@ -1,7 +1,7 @@
 r"""
-This module contains functions to handle markers.  Used by both the
-marker functionality of `~matplotlib.axes.Axes.plot` and
-`~matplotlib.axes.Axes.scatter`.
+Functions to handle markers; used by the marker functionality of
+`~matplotlib.axes.Axes.plot`, `~matplotlib.axes.Axes.scatter`, and
+`~matplotlib.axes.Axes.errorbar`.
 
 All possible markers are defined here:
 
@@ -131,7 +131,7 @@ from collections.abc import Sized
 
 import numpy as np
 
-from . import cbook, rcParams
+from . import _api, cbook, rcParams
 from .path import Path
 from .transforms import IdentityTransform, Affine2D
 
@@ -144,6 +144,18 @@ _empty_path = Path(np.empty((0, 2)))
 
 
 class MarkerStyle:
+    """
+    A class representing marker types.
+
+    Attributes
+    ----------
+    markers : list
+        All known markers.
+    filled_markers : list
+        All known filled markers. This is a subset of *markers*.
+    fillstyles : list
+        The supported fillstyles.
+    """
 
     markers = {
         '.': 'point',
@@ -203,21 +215,17 @@ class MarkerStyle:
 
     def __init__(self, marker=None, fillstyle=None):
         """
-        Attributes
-        ----------
-        markers : list of known marks
-
-        fillstyles : list of known fillstyles
-
-        filled_markers : list of known filled markers.
-
         Parameters
         ----------
-        marker : str or array-like, optional, default: None
-            See the descriptions of possible markers in the module docstring.
+        marker : str, array-like, Path, MarkerStyle, or None, default: None
+            - Another instance of *MarkerStyle* copies the details of that
+              ``marker``.
+            - *None* means no marker.
+            - For other possible marker values see the module docstring
+              `matplotlib.markers`.
 
-        fillstyle : str, optional, default: 'full'
-            'full', 'left", 'right', 'bottom', 'top', 'none'
+        fillstyle : str, default: 'full'
+            One of 'full', 'left', 'right', 'bottom', 'top', 'none'.
         """
         self._marker_function = None
         self.set_fillstyle(fillstyle)
@@ -233,7 +241,10 @@ class MarkerStyle:
         self._snap_threshold = None
         self._joinstyle = 'round'
         self._capstyle = 'butt'
-        self._filled = True
+        # Initial guess: Assume the marker is filled unless the fillstyle is
+        # set to 'none'. The marker function will override this for unfilled
+        # markers.
+        self._filled = self._fillstyle != 'none'
         self._marker_function()
 
     def __bool__(self):
@@ -247,15 +258,17 @@ class MarkerStyle:
 
     def set_fillstyle(self, fillstyle):
         """
-        Sets fillstyle
+        Set the fillstyle.
 
         Parameters
         ----------
-        fillstyle : string amongst known fillstyles
+        fillstyle : {'full', 'left', 'right', 'bottom', 'top', 'none'}
+            The part of the marker surface that is colored with
+            markerfacecolor.
         """
         if fillstyle is None:
             fillstyle = rcParams['markers.fillstyle']
-        cbook._check_in_list(self.fillstyles, fillstyle=fillstyle)
+        _api.check_in_list(self.fillstyles, fillstyle=fillstyle)
         self._fillstyle = fillstyle
         self._recache()
 
@@ -269,6 +282,18 @@ class MarkerStyle:
         return self._marker
 
     def set_marker(self, marker):
+        """
+        Set the marker.
+
+        Parameters
+        ----------
+        marker : str, array-like, Path, MarkerStyle, or None, default: None
+            - Another instance of *MarkerStyle* copies the details of that
+              ``marker``.
+            - *None* means no marker.
+            - For other possible marker values see the module docstring
+              `matplotlib.markers`.
+        """
         if (isinstance(marker, np.ndarray) and marker.ndim == 2 and
                 marker.shape[1] == 2):
             self._marker_function = self._set_vertices
@@ -298,15 +323,35 @@ class MarkerStyle:
             self._recache()
 
     def get_path(self):
+        """
+        Return a `.Path` for the primary part of the marker.
+
+        For unfilled markers this is the whole marker, for filled markers,
+        this is the area to be drawn with *markerfacecolor*.
+        """
         return self._path
 
     def get_transform(self):
+        """
+        Return the transform to be applied to the `.Path` from
+        `MarkerStyle.get_path()`.
+        """
         return self._transform.frozen()
 
     def get_alt_path(self):
+        """
+        Return a `.Path` for the alternate part of the marker.
+
+        For unfilled markers, this is *None*; for filled markers, this is the
+        area to be drawn with *markerfacecoloralt*.
+        """
         return self._alt_path
 
     def get_alt_transform(self):
+        """
+        Return the transform to be applied to the `.Path` from
+        `MarkerStyle.get_alt_path()`.
+        """
         return self._alt_transform.frozen()
 
     def get_snap_threshold(self):

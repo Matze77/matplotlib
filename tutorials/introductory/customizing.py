@@ -12,7 +12,8 @@ The :mod:`.style` package adds support for easy-to-switch plotting
 <customizing-with-matplotlibrc-files>` file (which is read at startup to
 configure Matplotlib).
 
-There are a number of pre-defined styles `provided by Matplotlib`_. For
+There are a number of pre-defined styles :doc:`provided by Matplotlib
+</gallery/style_sheets/style_sheets_reference>`. For
 example, there's a pre-defined style called "ggplot", which emulates the
 aesthetics of ggplot_ (a popular plotting package for R_). To use this style,
 just add:
@@ -121,8 +122,8 @@ mpl.rcParams['lines.linestyle'] = '--'
 plt.plot(data)
 
 ###############################################################################
-# Note, that in order to change the usual `plot` color you have to change the
-# *prop_cycle* property of *axes*:
+# Note, that in order to change the usual `~.Axes.plot` color you have to
+# change the *prop_cycle* property of *axes*:
 
 mpl.rcParams['axes.prop_cycle'] = cycler(color=['r', 'g', 'b', 'y'])
 plt.plot(data)  # first color is red
@@ -202,4 +203,3 @@ plt.plot(data)
 #
 # .. _ggplot: https://ggplot2.tidyverse.org/
 # .. _R: https://www.r-project.org/
-# .. _provided by Matplotlib: https://github.com/matplotlib/matplotlib/tree/master/lib/matplotlib/mpl-data/stylelib

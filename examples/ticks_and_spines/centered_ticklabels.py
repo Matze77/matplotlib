@@ -23,9 +23,9 @@ import matplotlib.dates as dates
 import matplotlib.ticker as ticker
 import matplotlib.pyplot as plt
 
-# load some financial data; apple's stock price
-with cbook.get_sample_data('aapl.npz') as fh:
-    r = np.load(fh)['price_data'].view(np.recarray)
+# load some financial data; Google's stock price
+r = (cbook.get_sample_data('goog.npz', np_load=True)['price_data']
+     .view(np.recarray))
 r = r[-250:]  # get the last 250 days
 
 fig, ax = plt.subplots()

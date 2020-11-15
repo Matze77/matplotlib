@@ -9,6 +9,8 @@ The selection logic is as follows:
   it; i.e. if the Qt5Agg backend is requested but QT_API is set to "pyqt4",
   then actually use Qt5 with PyQt5 or PySide2 (whichever can be imported);
 - otherwise, use whatever the rcParams indicate.
+
+Support for PyQt4 is deprecated.
 """
 
 from distutils.version import LooseVersion
@@ -40,13 +42,15 @@ elif "PySide.QtCore" in sys.modules:
     QT_API = QT_API_PYSIDE
 # Otherwise, check the QT_API environment variable (from Enthought).  This can
 # only override the binding, not the backend (in other words, we check that the
-# requested backend actually matches).
-elif mpl.rcParams["backend"] in ["Qt5Agg", "Qt5Cairo"]:
+# requested backend actually matches).  Use dict.__getitem__ to avoid
+# triggering backend resolution (which can result in a partially but
+# incompletely imported backend_qt5).
+elif dict.__getitem__(mpl.rcParams, "backend") in ["Qt5Agg", "Qt5Cairo"]:
     if QT_API_ENV in ["pyqt5", "pyside2"]:
         QT_API = _ETS[QT_API_ENV]
     else:
         QT_API = None
-elif mpl.rcParams["backend"] in ["Qt4Agg", "Qt4Cairo"]:
+elif dict.__getitem__(mpl.rcParams, "backend") in ["Qt4Agg", "Qt4Cairo"]:
     if QT_API_ENV in ["pyqt4", "pyside"]:
         QT_API = _ETS[QT_API_ENV]
     else:
@@ -83,6 +87,7 @@ def _setup_pyqt5():
         raise ValueError("Unexpected value for the 'backend.qt5' rcparam")
     _getSaveFileName = QtWidgets.QFileDialog.getSaveFileName
 
+    @mpl.cbook.deprecated("3.3", alternative="QtCore.qVersion()")
     def is_pyqt5():
         return True
 
@@ -138,6 +143,7 @@ def _setup_pyqt4():
         raise ValueError("Unexpected value for the 'backend.qt4' rcparam")
     QtWidgets = QtGui
 
+    @mpl.cbook.deprecated("3.3", alternative="QtCore.qVersion()")
     def is_pyqt5():
         return False
 
@@ -146,8 +152,8 @@ if QT_API in [QT_API_PYQT5, QT_API_PYSIDE2]:
     _setup_pyqt5()
 elif QT_API in [QT_API_PYQTv2, QT_API_PYSIDE, QT_API_PYQT]:
     _setup_pyqt4()
-elif QT_API is None:
-    if mpl.rcParams["backend"] == "Qt4Agg":
+elif QT_API is None:  # See above re: dict.__getitem__.
+    if dict.__getitem__(mpl.rcParams, "backend") == "Qt4Agg":
         _candidates = [(_setup_pyqt4, QT_API_PYQTv2),
                        (_setup_pyqt4, QT_API_PYSIDE),
                        (_setup_pyqt4, QT_API_PYQT),
@@ -174,4 +180,38 @@ else:  # We should not get there.
 # These globals are only defined for backcompatibility purposes.
 ETS = dict(pyqt=(QT_API_PYQTv2, 4), pyside=(QT_API_PYSIDE, 4),
            pyqt5=(QT_API_PYQT5, 5), pyside2=(QT_API_PYSIDE2, 5))
-QT_RC_MAJOR_VERSION = 5 if is_pyqt5() else 4
+
+QT_RC_MAJOR_VERSION = int(QtCore.qVersion().split(".")[0])
+
+if QT_RC_MAJOR_VERSION == 4:
+    mpl.cbook.warn_deprecated("3.3", name="support for Qt4")
+
+
+def _devicePixelRatioF(obj):
+    """
+    Return obj.devicePixelRatioF() with graceful fallback for older Qt.
+
+    This can be replaced by the direct call when we require Qt>=5.6.
+    """
+    try:
+        # Not available on Qt<5.6
+        return obj.devicePixelRatioF() or 1
+    except AttributeError:
+        pass
+    try:
+        # Not available on Qt4 or some older Qt5.
+        # self.devicePixelRatio() returns 0 in rare cases
+        return obj.devicePixelRatio() or 1
+    except AttributeError:
+        return 1
+
+
+def _setDevicePixelRatio(obj, val):
+    """
+    Call obj.setDevicePixelRatio(val) with graceful fallback for older Qt.
+
+    This can be replaced by the direct call when we require Qt>=5.6.
+    """
+    if hasattr(obj, 'setDevicePixelRatio'):
+        # Not available on Qt4 or some older Qt5.
+        obj.setDevicePixelRatio(val)

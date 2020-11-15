@@ -7,7 +7,7 @@ import hashlib
 from io import BytesIO
 import logging
 import os
-import pathlib
+from pathlib import Path
 import platform
 import shlex
 import shutil
@@ -32,7 +32,7 @@ def _get_xdg_cache_dir():
         cache_dir = os.path.expanduser('~/.cache')
         if cache_dir.startswith('~/'):  # Expansion failed.
             return None
-    return pathlib.Path(cache_dir, 'matplotlib')
+    return Path(cache_dir, 'matplotlib')
 
 
 def _get_hash(data):
@@ -40,6 +40,13 @@ def _get_hash(data):
     hasher = hashlib.sha256()
     hasher.update(data)
     return hasher.hexdigest()
+
+
+@functools.lru_cache()
+def _get_ssl_context():
+    import certifi
+    import ssl
+    return ssl.create_default_context(cafile=certifi.where())
 
 
 def download_or_cache(url, sha):
@@ -73,7 +80,8 @@ def download_or_cache(url, sha):
     # default User-Agent, but not (for example) wget; so I don't feel too
     # bad passing in an empty User-Agent.
     with urllib.request.urlopen(
-            urllib.request.Request(url, headers={"User-Agent": ""})) as req:
+            urllib.request.Request(url, headers={"User-Agent": ""}),
+            context=_get_ssl_context()) as req:
         data = req.read()
 
     file_sha = _get_hash(data)
@@ -137,8 +145,8 @@ if os.path.exists(setup_cfg):
     config.read(setup_cfg)
 options = {
     'backend': config.get('rc_options', 'backend', fallback=None),
-    'system_freetype': config.getboolean('libs', 'system_freetype',
-                                         fallback=False),
+    'system_freetype': config.getboolean(
+        'libs', 'system_freetype', fallback=sys.platform.startswith('aix')),
     'system_qhull': config.getboolean('libs', 'system_qhull',
                                       fallback=False),
 }
@@ -219,10 +227,9 @@ def pkg_config_setup_extension(
         conda_env_path = (os.getenv('CONDA_PREFIX')  # conda >= 4.1
                           or os.getenv('CONDA_DEFAULT_ENV'))  # conda < 4.1
         if conda_env_path and os.path.isdir(conda_env_path):
-            ext.include_dirs.append(os.fspath(
-                pathlib.Path(conda_env_path, "Library/include")))
-            ext.library_dirs.append(os.fspath(
-                pathlib.Path(conda_env_path, "Library/lib")))
+            conda_env_path = Path(conda_env_path)
+            ext.include_dirs.append(str(conda_env_path / "Library/include"))
+            ext.library_dirs.append(str(conda_env_path / "Library/lib"))
 
     # Default linked libs.
     ext.libraries.extend(default_libraries)
@@ -255,15 +262,15 @@ class SetupPackage:
         """
         return {}
 
-    def get_extension(self):
+    def get_extensions(self):
         """
-        Get a list of C extensions (`distutils.core.Extension`
+        Return or yield a list of C extensions (`distutils.core.Extension`
         objects) to add to the configuration.  These are added to the
         *extensions* list passed to `setuptools.setup`.
         """
-        return None
+        return []
 
-    def do_custom_build(self):
+    def do_custom_build(self, env):
         """
         If a package needs to do extra custom things, such as building a
         third-party library, before building an extension, it should
@@ -304,7 +311,7 @@ class Python(SetupPackage):
 
 def _pkg_data_helper(pkg, subdir):
     """Glob "lib/$pkg/$subdir/**/*", returning paths relative to "lib/$pkg"."""
-    base = pathlib.Path("lib", pkg)
+    base = Path("lib", pkg)
     return [str(path.relative_to(base)) for path in (base / subdir).rglob("*")]
 
 
@@ -325,6 +332,111 @@ class Matplotlib(SetupPackage):
                 '*.dll',  # Only actually matters on Windows.
             ],
         }
+
+    def get_extensions(self):
+        # agg
+        ext = Extension(
+            "matplotlib.backends._backend_agg", [
+                "src/mplutils.cpp",
+                "src/py_converters.cpp",
+                "src/_backend_agg.cpp",
+                "src/_backend_agg_wrapper.cpp",
+            ])
+        add_numpy_flags(ext)
+        add_libagg_flags_and_sources(ext)
+        FreeType().add_flags(ext)
+        yield ext
+        # c_internal_utils
+        ext = Extension(
+            "matplotlib._c_internal_utils", ["src/_c_internal_utils.c"],
+            libraries=({
+                "linux": ["dl"],
+                "win32": ["ole32", "shell32", "user32"],
+            }.get(sys.platform, [])))
+        yield ext
+        # contour
+        ext = Extension(
+            "matplotlib._contour", [
+                "src/_contour.cpp",
+                "src/_contour_wrapper.cpp",
+                "src/py_converters.cpp",
+            ])
+        add_numpy_flags(ext)
+        add_libagg_flags(ext)
+        yield ext
+        # ft2font
+        ext = Extension(
+            "matplotlib.ft2font", [
+                "src/ft2font.cpp",
+                "src/ft2font_wrapper.cpp",
+                "src/mplutils.cpp",
+                "src/py_converters.cpp",
+            ])
+        FreeType().add_flags(ext)
+        add_numpy_flags(ext)
+        add_libagg_flags(ext)
+        yield ext
+        # image
+        ext = Extension(
+            "matplotlib._image", [
+                "src/_image.cpp",
+                "src/mplutils.cpp",
+                "src/_image_wrapper.cpp",
+                "src/py_converters.cpp",
+            ])
+        add_numpy_flags(ext)
+        add_libagg_flags_and_sources(ext)
+        yield ext
+        # path
+        ext = Extension(
+            "matplotlib._path", [
+                "src/py_converters.cpp",
+                "src/_path_wrapper.cpp",
+            ])
+        add_numpy_flags(ext)
+        add_libagg_flags_and_sources(ext)
+        yield ext
+        # qhull
+        ext = Extension(
+            "matplotlib._qhull", ["src/qhull_wrap.c"],
+            define_macros=[("MPL_DEVNULL", os.devnull)])
+        add_numpy_flags(ext)
+        add_qhull_flags(ext)
+        yield ext
+        # tkagg
+        ext = Extension(
+            "matplotlib.backends._tkagg", [
+                "src/_tkagg.cpp",
+                "src/py_converters.cpp",
+            ],
+            include_dirs=["src"],
+            # psapi library needed for finding Tcl/Tk at run time.
+            libraries=({"linux": ["dl"], "win32": ["psapi"],
+                        "cygwin": ["psapi"]}.get(sys.platform, [])),
+            extra_link_args={"win32": ["-mwindows"]}.get(sys.platform, []))
+        add_numpy_flags(ext)
+        add_libagg_flags(ext)
+        yield ext
+        # tri
+        ext = Extension(
+            "matplotlib._tri", [
+                "src/tri/_tri.cpp",
+                "src/tri/_tri_wrapper.cpp",
+                "src/mplutils.cpp",
+            ])
+        add_numpy_flags(ext)
+        yield ext
+        # ttconv
+        ext = Extension(
+            "matplotlib._ttconv", [
+                "src/_ttconv.cpp",
+                "extern/ttconv/pprdrv_tt.cpp",
+                "extern/ttconv/pprdrv_tt2.cpp",
+                "extern/ttconv/ttutil.cpp",
+            ],
+            include_dirs=["extern"])
+        add_numpy_flags(ext)
+        yield ext
 
 
 class SampleData(OptionalPackage):
@@ -374,26 +486,38 @@ def add_numpy_flags(ext):
     ])
 
 
-class LibAgg(SetupPackage):
-    name = 'libagg'
+def add_libagg_flags(ext):
+    # We need a patched Agg not available elsewhere, so always use the vendored
+    # version.
+    ext.include_dirs.insert(0, "extern/agg24-svn/include")
 
-    def add_flags(self, ext, add_sources=True):
-        # We need a patched Agg not available elsewhere, so always use the
-        # vendored version.
-        ext.include_dirs.insert(0, 'extern/agg24-svn/include')
-        if add_sources:
-            agg_sources = [
-                'agg_bezier_arc.cpp',
-                'agg_curves.cpp',
-                'agg_image_filters.cpp',
-                'agg_trans_affine.cpp',
-                'agg_vcgen_contour.cpp',
-                'agg_vcgen_dash.cpp',
-                'agg_vcgen_stroke.cpp',
-                'agg_vpgen_segmentator.cpp'
-                ]
-            ext.sources.extend(os.path.join('extern', 'agg24-svn', 'src', x)
-                               for x in agg_sources)
+
+def add_libagg_flags_and_sources(ext):
+    # We need a patched Agg not available elsewhere, so always use the vendored
+    # version.
+    ext.include_dirs.insert(0, "extern/agg24-svn/include")
+    agg_sources = [
+        "agg_bezier_arc.cpp",
+        "agg_curves.cpp",
+        "agg_image_filters.cpp",
+        "agg_trans_affine.cpp",
+        "agg_vcgen_contour.cpp",
+        "agg_vcgen_dash.cpp",
+        "agg_vcgen_stroke.cpp",
+        "agg_vpgen_segmentator.cpp",
+    ]
+    ext.sources.extend(
+        os.path.join("extern", "agg24-svn", "src", x) for x in agg_sources)
+
+
+def add_qhull_flags(ext):
+    if options.get("system_qhull"):
+        ext.libraries.append("qhull")
+    else:
+        ext.include_dirs.insert(0, "extern")
+        ext.sources.extend(sorted(glob.glob("extern/libqhull/*.c")))
+        if sysconfig.get_config_var("LIBM") == "-lm":
+            ext.libraries.extend("m")
 
 
 # First compile checkdep_freetype2.c, which aborts the compilation either
@@ -417,8 +541,7 @@ class FreeType(SetupPackage):
                 default_libraries=['freetype'])
             ext.define_macros.append(('FREETYPE_BUILD_TYPE', 'system'))
         else:
-            src_path = pathlib.Path(
-                'build', f'freetype-{LOCAL_FREETYPE_VERSION}')
+            src_path = Path('build', f'freetype-{LOCAL_FREETYPE_VERSION}')
             # Statically link to the locally-built freetype.
             # This is certainly broken on Windows.
             ext.include_dirs.insert(0, str(src_path / 'include'))
@@ -430,12 +553,12 @@ class FreeType(SetupPackage):
                 0, str(src_path / 'objs' / '.libs' / libfreetype))
             ext.define_macros.append(('FREETYPE_BUILD_TYPE', 'local'))
 
-    def do_custom_build(self):
+    def do_custom_build(self, env):
         # We're using a system freetype
         if options.get('system_freetype'):
             return
 
-        src_path = pathlib.Path('build', f'freetype-{LOCAL_FREETYPE_VERSION}')
+        src_path = Path('build', f'freetype-{LOCAL_FREETYPE_VERSION}')
 
         # We've already built freetype
         if sys.platform == 'win32':
@@ -478,20 +601,32 @@ class FreeType(SetupPackage):
 
         print(f"Building freetype in {src_path}")
         if sys.platform != 'win32':  # compilation on non-windows
-            env = {**os.environ,
-                   "CFLAGS": "{} -fPIC".format(os.environ.get("CFLAGS", ""))}
+            env = {**env, "CFLAGS": "{} -fPIC".format(env.get("CFLAGS", ""))}
             subprocess.check_call(
                 ["./configure", "--with-zlib=no", "--with-bzip2=no",
-                 "--with-png=no", "--with-harfbuzz=no"],
+                 "--with-png=no", "--with-harfbuzz=no", "--enable-static",
+                 "--disable-shared"],
                 env=env, cwd=src_path)
-            subprocess.check_call(["make"], env=env, cwd=src_path)
-        else:
-            # compilation on windows
-            shutil.rmtree(str(pathlib.Path(src_path, "objs")),
-                          ignore_errors=True)
+            if 'GNUMAKE' in env:
+                make = env['GNUMAKE']
+            elif 'MAKE' in env:
+                make = env['MAKE']
+            else:
+                try:
+                    output = subprocess.check_output(['make', '-v'],
+                                                     stderr=subprocess.DEVNULL)
+                except subprocess.CalledProcessError:
+                    output = b''
+                if b'GNU' not in output and b'makepp' not in output:
+                    make = 'gmake'
+                else:
+                    make = 'make'
+            subprocess.check_call([make], env=env, cwd=src_path)
+        else:  # compilation on windows
+            shutil.rmtree(src_path / "objs", ignore_errors=True)
             msbuild_platform = (
                 'x64' if platform.architecture()[0] == '64bit' else 'Win32')
-            base_path = pathlib.Path("build/freetype-2.6.1/builds/windows")
+            base_path = Path("build/freetype-2.6.1/builds/windows")
             vc = 'vc2010'
             sln_path = (
                 base_path / vc / "freetype.sln"
@@ -532,170 +667,6 @@ class FreeType(SetupPackage):
             shutil.copy2(lib_path, src_path / "objs/.libs/libfreetype.lib")
 
 
-class FT2Font(SetupPackage):
-    name = 'ft2font'
-
-    def get_extension(self):
-        sources = [
-            'src/ft2font.cpp',
-            'src/ft2font_wrapper.cpp',
-            'src/mplutils.cpp',
-            'src/py_converters.cpp',
-            ]
-        ext = Extension('matplotlib.ft2font', sources)
-        FreeType().add_flags(ext)
-        add_numpy_flags(ext)
-        LibAgg().add_flags(ext, add_sources=False)
-        return ext
-
-
-class Qhull(SetupPackage):
-    name = "qhull"
-
-    def add_flags(self, ext):
-        if options.get('system_qhull'):
-            ext.libraries.append('qhull')
-        else:
-            ext.include_dirs.insert(0, 'extern')
-            ext.sources.extend(sorted(glob.glob('extern/libqhull/*.c')))
-            if sysconfig.get_config_var('LIBM') == '-lm':
-                ext.libraries.extend('m')
-
-
-class TTConv(SetupPackage):
-    name = "ttconv"
-
-    def get_extension(self):
-        sources = [
-            'src/_ttconv.cpp',
-            'extern/ttconv/pprdrv_tt.cpp',
-            'extern/ttconv/pprdrv_tt2.cpp',
-            'extern/ttconv/ttutil.cpp'
-            ]
-        ext = Extension('matplotlib.ttconv', sources)
-        add_numpy_flags(ext)
-        ext.include_dirs.insert(0, 'extern')
-        return ext
-
-
-class Path(SetupPackage):
-    name = "path"
-
-    def get_extension(self):
-        sources = [
-            'src/py_converters.cpp',
-            'src/_path_wrapper.cpp'
-            ]
-        ext = Extension('matplotlib._path', sources)
-        add_numpy_flags(ext)
-        LibAgg().add_flags(ext)
-        return ext
-
-
-class Image(SetupPackage):
-    name = "image"
-
-    def get_extension(self):
-        sources = [
-            'src/_image.cpp',
-            'src/mplutils.cpp',
-            'src/_image_wrapper.cpp',
-            'src/py_converters.cpp'
-            ]
-        ext = Extension('matplotlib._image', sources)
-        add_numpy_flags(ext)
-        LibAgg().add_flags(ext)
-
-        return ext
-
-
-class Contour(SetupPackage):
-    name = "contour"
-
-    def get_extension(self):
-        sources = [
-            "src/_contour.cpp",
-            "src/_contour_wrapper.cpp",
-            'src/py_converters.cpp',
-            ]
-        ext = Extension('matplotlib._contour', sources)
-        add_numpy_flags(ext)
-        LibAgg().add_flags(ext, add_sources=False)
-        return ext
-
-
-class QhullWrap(SetupPackage):
-    name = "qhull_wrap"
-
-    def get_extension(self):
-        sources = ['src/qhull_wrap.c']
-        ext = Extension('matplotlib._qhull', sources,
-                        define_macros=[('MPL_DEVNULL', os.devnull)])
-        add_numpy_flags(ext)
-        Qhull().add_flags(ext)
-        return ext
-
-
-class Tri(SetupPackage):
-    name = "tri"
-
-    def get_extension(self):
-        sources = [
-            "src/tri/_tri.cpp",
-            "src/tri/_tri_wrapper.cpp",
-            "src/mplutils.cpp"
-            ]
-        ext = Extension('matplotlib._tri', sources)
-        add_numpy_flags(ext)
-        return ext
-
-
-class BackendAgg(SetupPackage):
-    name = "agg"
-
-    def get_extension(self):
-        sources = [
-            "src/mplutils.cpp",
-            "src/py_converters.cpp",
-            "src/_backend_agg.cpp",
-            "src/_backend_agg_wrapper.cpp"
-            ]
-        ext = Extension('matplotlib.backends._backend_agg', sources)
-        add_numpy_flags(ext)
-        LibAgg().add_flags(ext)
-        FreeType().add_flags(ext)
-        return ext
-
-
-class BackendTkAgg(SetupPackage):
-    name = "tkagg"
-
-    def check(self):
-        return "installing; run-time loading from Python Tcl/Tk"
-
-    def get_extension(self):
-        sources = [
-            'src/_tkagg.cpp',
-            'src/py_converters.cpp',
-            ]
-
-        ext = Extension('matplotlib.backends._tkagg', sources)
-        self.add_flags(ext)
-        add_numpy_flags(ext)
-        LibAgg().add_flags(ext, add_sources=False)
-        return ext
-
-    def add_flags(self, ext):
-        ext.include_dirs.insert(0, 'src')
-        if sys.platform == 'win32':
-            # psapi library needed for finding Tcl/Tk at run time.
-            # user32 library needed for window manipulation functions.
-            ext.libraries.extend(['psapi', 'user32'])
-            ext.extra_link_args.extend(["-mwindows"])
-        elif sys.platform == 'linux':
-            ext.libraries.extend(['dl'])
-
-
 class BackendMacOSX(OptionalPackage):
     config_category = 'gui_support'
     name = 'macosx'
@@ -705,12 +676,13 @@ class BackendMacOSX(OptionalPackage):
             raise Skipped("Mac OS-X only")
         return super().check()
 
-    def get_extension(self):
+    def get_extensions(self):
         sources = [
             'src/_macosx.m'
             ]
         ext = Extension('matplotlib.backends._macosx', sources)
+        ext.extra_compile_args.extend(['-Werror=unguarded-availability'])
         ext.extra_link_args.extend(['-framework', 'Cocoa'])
         if platform.python_implementation().lower() == 'pypy':
             ext.extra_compile_args.append('-DPYPY=1')
-        return ext
+        yield ext

@@ -1,10 +1,11 @@
 import numpy as np
 
-from matplotlib import cbook
+from matplotlib import _api, cbook
 from .axes_divider import make_axes_locatable, Size
 from .mpl_axes import Axes
 
 
+@cbook._delete_parameter("3.3", "add_all")
 def make_rgb_axes(ax, pad=0.01, axes_class=None, add_all=True, **kwargs):
     """
     Parameters
@@ -55,7 +56,7 @@ def make_rgb_axes(ax, pad=0.01, axes_class=None, add_all=True, **kwargs):
     return ax_rgb
 
 
-@cbook.deprecated("3.3", alternative="ax.imshow(np.dstack([r, g, b]))")
+@_api.deprecated("3.3", alternative="ax.imshow(np.dstack([r, g, b]))")
 def imshow_rgb(ax, r, g, b, **kwargs):
     return ax.imshow(np.dstack([r, g, b]), **kwargs)
 
@@ -65,13 +66,14 @@ class RGBAxes:
     4-panel imshow (RGB, R, G, B).
 
     Layout:
-    +---------------+-----+
-    |               |  R  |
-    +               +-----+
-    |      RGB      |  G  |
-    +               +-----+
-    |               |  B  |
-    +---------------+-----+
+
+        +---------------+-----+
+        |               |  R  |
+        +               +-----+
+        |      RGB      |  G  |
+        +               +-----+
+        |               |  B  |
+        +---------------+-----+
 
     Subclasses can override the ``_defaultAxesClass`` attribute.
 
@@ -89,6 +91,7 @@ class RGBAxes:
 
     _defaultAxesClass = Axes
 
+    @cbook._delete_parameter("3.3", "add_all")
     def __init__(self, *args, pad=0, add_all=True, **kwargs):
         """
         Parameters
@@ -96,7 +99,8 @@ class RGBAxes:
         pad : float, default: 0
             fraction of the axes height to put as padding.
         add_all : bool, default: True
-            Whether to add the {rgb, r, g, b} axes to the figure
+            Whether to add the {rgb, r, g, b} axes to the figure.
+            This parameter is deprecated.
         axes_class : matplotlib.axes.Axes
 
         *args
@@ -108,32 +112,25 @@ class RGBAxes:
         self.RGB = ax = axes_class(*args, **kwargs)
         if add_all:
             ax.get_figure().add_axes(ax)
+        else:
+            kwargs["add_all"] = add_all  # only show deprecation in that case
         self.R, self.G, self.B = make_rgb_axes(
-            ax, pad=pad, axes_class=axes_class, add_all=add_all, **kwargs)
-        self._config_axes()
-
-    def _config_axes(self, line_color='w', marker_edge_color='w'):
-        """Set the line color and ticks for the axes
-
-        Parameters
-        ----------
-        line_color : color
-        marker_edge_color : color
-        """
+            ax, pad=pad, axes_class=axes_class, **kwargs)
+        # Set the line color and ticks for the axes.
         for ax1 in [self.RGB, self.R, self.G, self.B]:
-            ax1.axis[:].line.set_color(line_color)
-            ax1.axis[:].major_ticks.set_markeredgecolor(marker_edge_color)
+            ax1.axis[:].line.set_color("w")
+            ax1.axis[:].major_ticks.set_markeredgecolor("w")
 
-    @cbook.deprecated("3.3")
+    @_api.deprecated("3.3")
     def add_RGB_to_figure(self):
-        """Add the red, green and blue axes to the RGB composite's axes figure
-        """
+        """Add red, green and blue axes to the RGB composite's axes figure."""
         self.RGB.get_figure().add_axes(self.R)
         self.RGB.get_figure().add_axes(self.G)
         self.RGB.get_figure().add_axes(self.B)
 
     def imshow_rgb(self, r, g, b, **kwargs):
-        """Create the four images {rgb, r, g, b}
+        """
+        Create the four images {rgb, r, g, b}.
 
         Parameters
         ----------
@@ -170,6 +167,6 @@ class RGBAxes:
         return im_rgb, im_r, im_g, im_b
 
 
-@cbook.deprecated("3.3", alternative="RGBAxes")
+@_api.deprecated("3.3", alternative="RGBAxes")
 class RGBAxesBase(RGBAxes):
     pass

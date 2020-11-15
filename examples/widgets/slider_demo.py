@@ -1,7 +1,7 @@
 """
-===========
-Slider Demo
-===========
+======
+Slider
+======
 
 Using the slider widget to control visual properties of your plot.
 
@@ -58,5 +58,8 @@ def colorfunc(label):
     l.set_color(label)
     fig.canvas.draw_idle()
 radio.on_clicked(colorfunc)
+
+# Initialize plot with correct initial active value
+colorfunc(radio.value_selected)
 
 plt.show()

@@ -11,7 +11,7 @@ a box plot is drawn on top. Lastly, the styles of the artists
 of the violins are modified.
 
 For more information on violin plots, the scikit-learn docs have a great
-section: http://scikit-learn.org/stable/modules/density.html
+section: https://scikit-learn.org/stable/modules/density.html
 """
 
 import matplotlib.pyplot as plt
@@ -28,7 +28,7 @@ def adjacent_values(vals, q1, q3):
 
 
 def set_axis_style(ax, labels):
-    ax.get_xaxis().set_tick_params(direction='out')
+    ax.xaxis.set_tick_params(direction='out')
     ax.xaxis.set_ticks_position('bottom')
     ax.set_xticks(np.arange(1, len(labels) + 1))
     ax.set_xticklabels(labels)

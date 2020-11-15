@@ -71,6 +71,11 @@ The ``plot`` directive supports the following options:
         If specified, the code block will be run, but no figures will be
         inserted.  This is usually useful with the ``:context:`` option.
 
+    caption : str
+        If specified, the option's argument will be used as a caption for the
+        figure. This overwrites the caption given in the content, when the plot
+        is generated from a file.
+
 Additionally, this directive supports all of the options of the `image`
 directive, except for *target* (since plot will add its own target).  These
 include *alt*, *height*, *width*, *scale*, *align* and *class*.
@@ -154,7 +159,9 @@ import matplotlib.pyplot as plt
 from matplotlib import _pylab_helpers, cbook
 
 matplotlib.use("agg")
-align = Image.align
+align = cbook.deprecated(
+    "3.4", alternative="docutils.parsers.rst.directives.images.Image.align")(
+        Image.align)
 
 __version__ = 2
 
@@ -184,11 +191,6 @@ def _option_context(arg):
 
 def _option_format(arg):
     return directives.choice(arg, ('python', 'doctest'))
-
-
-def _option_align(arg):
-    return directives.choice(arg, ("top", "middle", "bottom", "left", "center",
-                                   "right"))
 
 
 def mark_plot_labels(app, document):
@@ -233,23 +235,26 @@ class PlotDirective(Directive):
         'height': directives.length_or_unitless,
         'width': directives.length_or_percentage_or_unitless,
         'scale': directives.nonnegative_int,
-        'align': _option_align,
+        'align': Image.align,
         'class': directives.class_option,
         'include-source': _option_boolean,
         'format': _option_format,
         'context': _option_context,
         'nofigs': directives.flag,
         'encoding': directives.encoding,
+        'caption': directives.unchanged,
         }
 
     def run(self):
         """Run the plot directive."""
-        return run(self.arguments, self.content, self.options,
-                   self.state_machine, self.state, self.lineno)
+        try:
+            return run(self.arguments, self.content, self.options,
+                       self.state_machine, self.state, self.lineno)
+        except Exception as e:
+            raise self.error(str(e))
 
 
 def setup(app):
-    import matplotlib
     setup.app = app
     setup.config = app.config
     setup.confdir = app.confdir
@@ -636,6 +641,16 @@ def run(arguments, content, options, state_machine, state, lineno):
         # If there is content, it will be passed as a caption.
         caption = '\n'.join(content)
 
+        # Enforce unambiguous use of captions.
+        if "caption" in options:
+            if caption:
+                raise ValueError(
+                    'Caption specified in both content and options.'
+                    ' Please remove ambiguity.'
+                )
+            # Use caption option
+            caption = options["caption"]
+
         # If the optional function name is provided, use it
         if len(arguments) == 2:
             function_name = arguments[1]
@@ -652,7 +667,7 @@ def run(arguments, content, options, state_machine, state, lineno):
         base, ext = os.path.splitext(os.path.basename(source_file_name))
         output_base = '%s-%d.py' % (base, counter)
         function_name = None
-        caption = ''
+        caption = options.get('caption', '')
 
     base, source_ext = os.path.splitext(output_base)
     if source_ext in ('.py', '.rst', '.txt'):

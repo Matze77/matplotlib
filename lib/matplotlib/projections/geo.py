@@ -1,6 +1,6 @@
 import numpy as np
 
-from matplotlib import cbook, rcParams
+from matplotlib import _api, rcParams
 from matplotlib.axes import Axes
 import matplotlib.axis as maxis
 from matplotlib.patches import Circle
@@ -32,12 +32,12 @@ class GeoAxes(Axes):
         self.xaxis = maxis.XAxis(self)
         self.yaxis = maxis.YAxis(self)
         # Do not register xaxis or yaxis with spines -- as done in
-        # Axes._init_axis() -- until GeoAxes.xaxis.cla() works.
+        # Axes._init_axis() -- until GeoAxes.xaxis.clear() works.
         # self.spines['geo'].register_axis(self.yaxis)
         self._update_transScale()
 
     def cla(self):
-        Axes.cla(self)
+        super().cla()
 
         self.set_longitude_grid(30)
         self.set_latitude_grid(15)
@@ -115,7 +115,7 @@ class GeoAxes(Axes):
             .translate(0.5, 0.5)
 
     def get_xaxis_transform(self, which='grid'):
-        cbook._check_in_list(['tick1', 'tick2', 'grid'], which=which)
+        _api.check_in_list(['tick1', 'tick2', 'grid'], which=which)
         return self._xaxis_transform
 
     def get_xaxis_text1_transform(self, pad):
@@ -125,7 +125,7 @@ class GeoAxes(Axes):
         return self._xaxis_text2_transform, 'top', 'center'
 
     def get_yaxis_transform(self, which='grid'):
-        cbook._check_in_list(['tick1', 'tick2', 'grid'], which=which)
+        _api.check_in_list(['tick1', 'tick2', 'grid'], which=which)
         return self._yaxis_transform
 
     def get_yaxis_text1_transform(self, pad):
@@ -202,7 +202,7 @@ class GeoAxes(Axes):
 
     def can_zoom(self):
         """
-        Return *True* if this axes supports the zoom box button functionality.
+        Return whether this axes supports the zoom box button functionality.
 
         This axes object does not support interactive zoom box.
         """
@@ -210,7 +210,7 @@ class GeoAxes(Axes):
 
     def can_pan(self):
         """
-        Return *True* if this axes supports the pan/zoom button functionality.
+        Return whether this axes supports the pan/zoom button functionality.
 
         This axes object does not support interactive pan/zoom.
         """
@@ -237,7 +237,7 @@ class _GeoTransform(Transform):
         Resolution is the number of steps to interpolate between each input
         line segment to approximate its path in curved space.
         """
-        Transform.__init__(self)
+        super().__init__()
         self._resolution = resolution
 
     def __str__(self):
@@ -290,7 +290,7 @@ class AitoffAxes(GeoAxes):
 
     def __init__(self, *args, **kwargs):
         self._longitude_cap = np.pi / 2.0
-        GeoAxes.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.set_aspect(0.5, adjustable='box', anchor='C')
         self.cla()
 
@@ -335,7 +335,7 @@ class HammerAxes(GeoAxes):
 
     def __init__(self, *args, **kwargs):
         self._longitude_cap = np.pi / 2.0
-        GeoAxes.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.set_aspect(0.5, adjustable='box', anchor='C')
         self.cla()
 
@@ -393,7 +393,7 @@ class MollweideAxes(GeoAxes):
             # docstring inherited
             x, y = xy.T
             # from Equations (7, 8) of
-            # http://mathworld.wolfram.com/MollweideProjection.html
+            # https://mathworld.wolfram.com/MollweideProjection.html
             theta = np.arcsin(y / np.sqrt(2))
             longitude = (np.pi / (2 * np.sqrt(2))) * x / np.cos(theta)
             latitude = np.arcsin((2 * theta + np.sin(2 * theta)) / np.pi)
@@ -405,7 +405,7 @@ class MollweideAxes(GeoAxes):
 
     def __init__(self, *args, **kwargs):
         self._longitude_cap = np.pi / 2.0
-        GeoAxes.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.set_aspect(0.5, adjustable='box', anchor='C')
         self.cla()
 
@@ -490,12 +490,12 @@ class LambertAxes(GeoAxes):
         self._longitude_cap = np.pi / 2
         self._center_longitude = center_longitude
         self._center_latitude = center_latitude
-        GeoAxes.__init__(self, *args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.set_aspect('equal', adjustable='box', anchor='C')
         self.cla()
 
     def cla(self):
-        GeoAxes.cla(self)
+        super().cla()
         self.yaxis.set_major_formatter(NullFormatter())
 
     def _get_core_transform(self, resolution):

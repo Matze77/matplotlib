@@ -15,8 +15,9 @@ from weakref import WeakValueDictionary
 import numpy as np
 
 import matplotlib as mpl
-from . import _path, cbook
+from . import _api, _path, cbook
 from .cbook import _to_unmasked_float_array, simple_linear_interpolation
+from .bezier import BezierSegment
 
 
 class Path:
@@ -128,18 +129,19 @@ class Path:
             and codes as read-only arrays.
         """
         vertices = _to_unmasked_float_array(vertices)
-        if vertices.ndim != 2 or vertices.shape[1] != 2:
-            raise ValueError(
-                "'vertices' must be a 2D list or array with shape Nx2")
+        _api.check_shape((None, 2), vertices=vertices)
 
         if codes is not None:
             codes = np.asarray(codes, self.code_type)
             if codes.ndim != 1 or len(codes) != len(vertices):
                 raise ValueError("'codes' must be a 1D list or array with the "
-                                 "same length of 'vertices'")
+                                 "same length of 'vertices'. "
+                                 f"Your vertices have shape {vertices.shape} "
+                                 f"but your codes have shape {codes.shape}")
             if len(codes) and codes[0] != self.MOVETO:
                 raise ValueError("The first element of 'code' must be equal "
-                                 "to 'MOVETO' ({})".format(self.MOVETO))
+                                 f"to 'MOVETO' ({self.MOVETO}).  "
+                                 f"Your first code is {codes[0]}")
         elif closed and len(vertices):
             codes = np.empty(len(vertices), dtype=self.code_type)
             codes[0] = self.MOVETO
@@ -214,7 +216,7 @@ class Path:
     @property
     def codes(self):
         """
-        The list of codes in the `Path` as a 1-D numpy array.  Each
+        The list of codes in the `Path` as a 1D numpy array.  Each
         code is one of `STOP`, `MOVETO`, `LINETO`, `CURVE3`, `CURVE4`
         or `CLOSEPOLY`.  For codes that correspond to more than one
         vertex (`CURVE3` and `CURVE4`), that code will be repeated so
@@ -242,15 +244,6 @@ class Path:
     def simplify_threshold(self, threshold):
         self._simplify_threshold = threshold
 
-    @cbook.deprecated(
-        "3.1", alternative="not np.isfinite(self.vertices).all()")
-    @property
-    def has_nonfinite(self):
-        """
-        `True` if the vertices array has nonfinite values.
-        """
-        return not np.isfinite(self._vertices).all()
-
     @property
     def should_simplify(self):
         """
@@ -271,7 +264,7 @@ class Path:
 
     def __copy__(self):
         """
-        Returns a shallow copy of the `Path`, which will share the
+        Return a shallow copy of the `Path`, which will share the
         vertices and codes with the source `Path`.
         """
         import copy
@@ -281,7 +274,7 @@ class Path:
 
     def __deepcopy__(self, memo=None):
         """
-        Returns a deepcopy of the `Path`.  The `Path` will not be
+        Return a deepcopy of the `Path`.  The `Path` will not be
         readonly, even if the source `Path` is.
         """
         try:
@@ -359,9 +352,10 @@ class Path:
                       snap=False, stroke_width=1.0, simplify=None,
                       curves=True, sketch=None):
         """
-        Iterates over all of the curve segments in the path.  Each iteration
-        returns a 2-tuple ``(vertices, code)``, where ``vertices`` is a
-        sequence of 1-3 coordinate pairs, and ``code`` is a `Path` code.
+        Iterate over all curve segments in the path.
+
+        Each iteration returns a pair ``(vertices, code)``, where ``vertices``
+        is a sequence of 1-3 coordinate pairs, and ``code`` is a `Path` code.
 
         Additionally, this method can provide a number of standard cleanups and
         conversions to the path.
@@ -379,7 +373,7 @@ class Path:
             defining a rectangle in which to clip the path.
         snap : None or bool, optional
             If True, snap all nodes to pixels; if False, don't snap them.
-            If None, perform snapping if the path contains only segments
+            If None, snap if the path contains only segments
             parallel to the x or y axes, and no more than 1024 of them.
         stroke_width : float, optional
             The width of the stroke being drawn (used for path snapping).
@@ -420,6 +414,53 @@ class Path:
                     curr_vertices = np.append(curr_vertices, next(vertices))
             yield curr_vertices, code
 
+    def iter_bezier(self, **kwargs):
+        """
+        Iterate over each bezier curve (lines included) in a Path.
+
+        Parameters
+        ----------
+        **kwargs
+            Forwarded to `.iter_segments`.
+
+        Yields
+        ------
+        B : matplotlib.bezier.BezierSegment
+            The bezier curves that make up the current path. Note in particular
+            that freestanding points are bezier curves of order 0, and lines
+            are bezier curves of order 1 (with two control points).
+        code : Path.code_type
+            The code describing what kind of curve is being returned.
+            Path.MOVETO, Path.LINETO, Path.CURVE3, Path.CURVE4 correspond to
+            bezier curves with 1, 2, 3, and 4 control points (respectively).
+            Path.CLOSEPOLY is a Path.LINETO with the control points correctly
+            chosen based on the start/end points of the current stroke.
+        """
+        first_vert = None
+        prev_vert = None
+        for verts, code in self.iter_segments(**kwargs):
+            if first_vert is None:
+                if code != Path.MOVETO:
+                    raise ValueError("Malformed path, must start with MOVETO.")
+            if code == Path.MOVETO:  # a point is like "CURVE1"
+                first_vert = verts
+                yield BezierSegment(np.array([first_vert])), code
+            elif code == Path.LINETO:  # "CURVE2"
+                yield BezierSegment(np.array([prev_vert, verts])), code
+            elif code == Path.CURVE3:
+                yield BezierSegment(np.array([prev_vert, verts[:2],
+                                              verts[2:]])), code
+            elif code == Path.CURVE4:
+                yield BezierSegment(np.array([prev_vert, verts[:2],
+                                              verts[2:4], verts[4:]])), code
+            elif code == Path.CLOSEPOLY:
+                yield BezierSegment(np.array([prev_vert, first_vert])), code
+            elif code == Path.STOP:
+                return
+            else:
+                raise ValueError("Invalid Path.code_type: " + str(code))
+            prev_vert = verts[-2:]
+
     @cbook._delete_parameter("3.3", "quantize")
     def cleaned(self, transform=None, remove_nans=False, clip=None,
                 quantize=False, simplify=False, curves=False,
@@ -455,7 +496,11 @@ class Path:
 
     def contains_point(self, point, transform=None, radius=0.0):
         """
-        Return whether the (closed) path contains the given point.
+        Return whether the area enclosed by the path contains the given point.
+
+        The path is always treated as closed; i.e. if the last code is not
+        CLOSEPOLY an implicit segment connecting the last vertex to the first
+        vertex is assumed.
 
         Parameters
         ----------
@@ -476,6 +521,17 @@ class Path:
         Returns
         -------
         bool
+
+        Notes
+        -----
+        The current algorithm has some limitations:
+
+        - The result is undefined for points exactly at the boundary
+          (i.e. at the path shifted by *radius/2*).
+        - The result is undefined if there is no enclosed area, i.e. all
+          vertices are on a straight line.
+        - If bounding lines start to cross each other due to *radius* shift,
+          the result is not guaranteed to be correct.
         """
         if transform is not None:
             transform = transform.frozen()
@@ -490,7 +546,11 @@ class Path:
 
     def contains_points(self, points, transform=None, radius=0.0):
         """
-        Return whether the (closed) path contains the given point.
+        Return whether the area enclosed by the path contains the given points.
+
+        The path is always treated as closed; i.e. if the last code is not
+        CLOSEPOLY an implicit segment connecting the last vertex to the first
+        vertex is assumed.
 
         Parameters
         ----------
@@ -500,7 +560,7 @@ class Path:
             If not ``None``, *points* will be compared to ``self`` transformed
             by *transform*; i.e. for a correct check, *transform* should
             transform the path into the coordinate system of *points*.
-        radius : float, default: 0.
+        radius : float, default: 0
             Add an additional margin on the path in coordinates of *points*.
             The path is extended tangentially by *radius/2*; i.e. if you would
             draw the path with a linewidth of *radius*, all points on the line
@@ -511,6 +571,17 @@ class Path:
         Returns
         -------
         length-N bool array
+
+        Notes
+        -----
+        The current algorithm has some limitations:
+
+        - The result is undefined for points exactly at the boundary
+          (i.e. at the path shifted by *radius/2*).
+        - The result is undefined if there is no enclosed area, i.e. all
+          vertices are on a straight line.
+        - If bounding lines start to cross each other due to *radius* shift,
+          the result is not guaranteed to be correct.
         """
         if transform is not None:
             transform = transform.frozen()
@@ -519,49 +590,66 @@ class Path:
 
     def contains_path(self, path, transform=None):
         """
-        Returns whether this (closed) path completely contains the given path.
+        Return whether this (closed) path completely contains the given path.
 
         If *transform* is not ``None``, the path will be transformed before
-        performing the test.
+        checking for containment.
         """
         if transform is not None:
             transform = transform.frozen()
         return _path.path_in_path(self, None, path, transform)
 
-    def get_extents(self, transform=None):
+    def get_extents(self, transform=None, **kwargs):
         """
-        Returns the extents (*xmin*, *ymin*, *xmax*, *ymax*) of the path.
+        Get Bbox of the path.
 
-        Unlike computing the extents on the *vertices* alone, this
-        algorithm will take into account the curves and deal with
-        control points appropriately.
+        Parameters
+        ----------
+        transform : matplotlib.transforms.Transform, optional
+            Transform to apply to path before computing extents, if any.
+        **kwargs
+            Forwarded to `.iter_bezier`.
+
+        Returns
+        -------
+        matplotlib.transforms.Bbox
+            The extents of the path Bbox([[xmin, ymin], [xmax, ymax]])
         """
         from .transforms import Bbox
-        path = self
         if transform is not None:
-            transform = transform.frozen()
-            if not transform.is_affine:
-                path = self.transformed(transform)
-                transform = None
-        return Bbox(_path.get_path_extents(path, transform))
+            self = transform.transform_path(self)
+        if self.codes is None:
+            xys = self.vertices
+        elif len(np.intersect1d(self.codes, [Path.CURVE3, Path.CURVE4])) == 0:
+            xys = self.vertices[self.codes != Path.CLOSEPOLY]
+        else:
+            xys = []
+            for curve, code in self.iter_bezier(**kwargs):
+                # places where the derivative is zero can be extrema
+                _, dzeros = curve.axis_aligned_extrema()
+                # as can the ends of the curve
+                xys.append(curve([0, *dzeros, 1]))
+            xys = np.concatenate(xys)
+        if len(xys):
+            return Bbox([xys.min(axis=0), xys.max(axis=0)])
+        else:
+            return Bbox.null()
 
     def intersects_path(self, other, filled=True):
         """
-        Returns *True* if this path intersects another given path.
+        Return whether if this path intersects another given path.
 
-        *filled*, when True, treats the paths as if they were filled.
-        That is, if one path completely encloses the other,
-        :meth:`intersects_path` will return True.
+        If *filled* is True, then this also returns True if one path completely
+        encloses the other (i.e., the paths are treated as filled).
         """
         return _path.path_intersects_path(self, other, filled)
 
     def intersects_bbox(self, bbox, filled=True):
         """
-        Returns whether this path intersects a given `~.transforms.Bbox`.
+        Return whether this path intersects a given `~.transforms.Bbox`.
 
-        *filled*, when True, treats the path as if it was filled.
-        That is, if the path completely encloses the bounding box,
-        :meth:`intersects_bbox` will return True.
+        If *filled* is True, then this also returns True if the path completely
+        encloses the `.Bbox` (i.e., the path is treated as filled).
 
         The bounding box is always considered filled.
         """
@@ -570,8 +658,9 @@ class Path:
 
     def interpolated(self, steps):
         """
-        Returns a new path resampled to length N x steps.  Does not
-        currently handle interpolating curves.
+        Return a new path resampled to length N x steps.
+
+        Codes other than LINETO are not handled correctly.
         """
         if steps == 1:
             return self
@@ -648,7 +737,8 @@ class Path:
     def unit_regular_polygon(cls, numVertices):
         """
         Return a :class:`Path` instance for a unit regular polygon with the
-        given *numVertices* and radius of 1.0, centered at (0, 0).
+        given *numVertices* such that the circumscribing circle has radius 1.0,
+        centered at (0, 0).
         """
         if numVertices <= 16:
             path = cls._unit_regular_polygons.get(numVertices)
@@ -733,7 +823,7 @@ class Path:
         The circle is approximated using 8 cubic Bezier curves, as described in
 
           Lancaster, Don.  `Approximating a Circle or an Ellipse Using Four
-          Bezier Cubic Splines <http://www.tinaja.com/glib/ellipse4.pdf>`_.
+          Bezier Cubic Splines <https://www.tinaja.com/glib/ellipse4.pdf>`_.
         """
         MAGIC = 0.2652031
         SQRTHALF = np.sqrt(0.5)

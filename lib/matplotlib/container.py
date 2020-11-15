@@ -19,8 +19,7 @@ class Container(tuple):
 
     def __init__(self, kl, label=None):
         self.eventson = False  # fire events only if eventson
-        self._oid = 0  # an observer id
-        self._propobservers = {}  # a dict from oids to funcs
+        self._callbacks = cbook.CallbackRegistry()
         self._remove_method = None
         self.set_label(label)
 
@@ -29,7 +28,6 @@ class Container(tuple):
                 self, scalarp=lambda x: isinstance(x, Artist)):
             if c is not None:
                 c.remove()
-
         if self._remove_method:
             self._remove_method(self)
 
@@ -65,7 +63,7 @@ class BarContainer(Container):
     def __init__(self, patches, errorbar=None, **kwargs):
         self.patches = patches
         self.errorbar = errorbar
-        Container.__init__(self, patches, **kwargs)
+        super().__init__(patches, **kwargs)
 
 
 class ErrorbarContainer(Container):
@@ -97,7 +95,7 @@ class ErrorbarContainer(Container):
         self.lines = lines
         self.has_xerr = has_xerr
         self.has_yerr = has_yerr
-        Container.__init__(self, lines, **kwargs)
+        super().__init__(lines, **kwargs)
 
 
 class StemContainer(Container):
@@ -132,4 +130,4 @@ class StemContainer(Container):
         self.markerline = markerline
         self.stemlines = stemlines
         self.baseline = baseline
-        Container.__init__(self, markerline_stemlines_baseline, **kwargs)
+        super().__init__(markerline_stemlines_baseline, **kwargs)

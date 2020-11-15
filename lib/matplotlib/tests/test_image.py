@@ -8,7 +8,6 @@ import sys
 import urllib.request
 
 import numpy as np
-from numpy import ma
 from numpy.testing import assert_array_equal
 from PIL import Image
 
@@ -28,20 +27,16 @@ def test_image_interps():
     # Remove this line when this test image is regenerated.
     plt.rcParams['text.kerning_factor'] = 6
 
-    X = np.arange(100)
-    X = X.reshape(5, 20)
+    X = np.arange(100).reshape(5, 20)
 
-    fig = plt.figure()
-    ax1 = fig.add_subplot(311)
+    fig, (ax1, ax2, ax3) = plt.subplots(3)
     ax1.imshow(X, interpolation='nearest')
     ax1.set_title('three interpolations')
     ax1.set_ylabel('nearest')
 
-    ax2 = fig.add_subplot(312)
     ax2.imshow(X, interpolation='bilinear')
     ax2.set_ylabel('bilinear')
 
-    ax3 = fig.add_subplot(313)
     ax3.imshow(X, interpolation='bicubic')
     ax3.set_ylabel('bicubic')
 
@@ -70,17 +65,16 @@ def test_interp_nearest_vs_none():
     rcParams['savefig.dpi'] = 3
     X = np.array([[[218, 165, 32], [122, 103, 238]],
                   [[127, 255, 0], [255, 99, 71]]], dtype=np.uint8)
-    fig = plt.figure()
-    ax1 = fig.add_subplot(121)
+    fig, (ax1, ax2) = plt.subplots(1, 2)
     ax1.imshow(X, interpolation='none')
     ax1.set_title('interpolation none')
-    ax2 = fig.add_subplot(122)
     ax2.imshow(X, interpolation='nearest')
     ax2.set_title('interpolation nearest')
 
 
-def do_figimage(suppressComposite):
-    """Helper for the next two tests."""
+@pytest.mark.parametrize('suppressComposite', [False, True])
+@image_comparison(['figimage'], extensions=['png', 'pdf'])
+def test_figimage(suppressComposite):
     fig = plt.figure(figsize=(2, 2), dpi=100)
     fig.suppressComposite = suppressComposite
     x, y = np.ix_(np.arange(100) / 100.0, np.arange(100) / 100)
@@ -92,18 +86,6 @@ def do_figimage(suppressComposite):
     fig.figimage(img[::-1, :], xo=0, yo=100, origin='lower')
     fig.figimage(img[:, ::-1], xo=100, yo=0, origin='lower')
     fig.figimage(img[::-1, ::-1], xo=100, yo=100, origin='lower')
-
-
-@image_comparison(['figimage-0'], extensions=['png', 'pdf'])
-def test_figimage0():
-    suppressComposite = False
-    do_figimage(suppressComposite)
-
-
-@image_comparison(['figimage-1'], extensions=['png', 'pdf'])
-def test_figimage1():
-    suppressComposite = True
-    do_figimage(suppressComposite)
 
 
 def test_image_python_io():
@@ -272,19 +254,13 @@ def test_imsave_pil_kwargs_tiff():
 
 @image_comparison(['image_alpha'], remove_text=True)
 def test_image_alpha():
-    plt.figure()
-
     np.random.seed(0)
     Z = np.random.rand(6, 6)
 
-    plt.subplot(131)
-    plt.imshow(Z, alpha=1.0, interpolation='none')
-
-    plt.subplot(132)
-    plt.imshow(Z, alpha=0.5, interpolation='none')
-
-    plt.subplot(133)
-    plt.imshow(Z, alpha=0.5, interpolation='nearest')
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3)
+    ax1.imshow(Z, alpha=1.0, interpolation='none')
+    ax2.imshow(Z, alpha=0.5, interpolation='none')
+    ax3.imshow(Z, alpha=0.5, interpolation='nearest')
 
 
 def test_cursor_data():
@@ -657,17 +633,6 @@ def test_jpeg_alpha():
     assert corner_pixel == (254, 0, 0)
 
 
-def test_nonuniformimage_setdata():
-    ax = plt.gca()
-    im = NonUniformImage(ax)
-    x = np.arange(3, dtype=float)
-    y = np.arange(4, dtype=float)
-    z = np.arange(12, dtype=float).reshape((4, 3))
-    im.set_data(x, y, z)
-    x[0] = y[0] = z[0, 0] = 9.9
-    assert im._A[0, 0] == im._Ax[0] == im._Ay[0] == 0, 'value changed'
-
-
 def test_axesimage_setdata():
     ax = plt.gca()
     im = AxesImage(ax)
@@ -686,15 +651,20 @@ def test_figureimage_setdata():
     assert im._A[0, 0] == 0, 'value changed'
 
 
-def test_pcolorimage_setdata():
+@pytest.mark.parametrize(
+    "image_cls,x,y,a", [
+        (NonUniformImage,
+         np.arange(3.), np.arange(4.), np.arange(12.).reshape((4, 3))),
+        (PcolorImage,
+         np.arange(3.), np.arange(4.), np.arange(6.).reshape((3, 2))),
+    ])
+def test_setdata_xya(image_cls, x, y, a):
     ax = plt.gca()
-    im = PcolorImage(ax)
-    x = np.arange(3, dtype=float)
-    y = np.arange(4, dtype=float)
-    z = np.arange(6, dtype=float).reshape((3, 2))
-    im.set_data(x, y, z)
-    x[0] = y[0] = z[0, 0] = 9.9
+    im = image_cls(ax)
+    im.set_data(x, y, a)
+    x[0] = y[0] = a[0, 0] = 9.9
     assert im._A[0, 0] == im._Ax[0] == im._Ay[0] == 0, 'value changed'
+    im.set_data(x, y, a.reshape((*a.shape, -1)))  # Just a smoketest.
 
 
 def test_minimized_rasterized():
@@ -731,7 +701,7 @@ def test_minimized_rasterized():
 
 
 def test_load_from_url():
-    path = Path(__file__).parent / "baseline_images/test_image/imshow.png"
+    path = Path(__file__).parent / "baseline_images/pngsuite/basn3p04.png"
     url = ('file:'
            + ('///' if sys.platform == 'win32' else '')
            + path.resolve().as_posix())
@@ -750,7 +720,11 @@ def test_log_scale_image():
     ax.set(yscale='log')
 
 
-@image_comparison(['rotate_image'], remove_text=True)
+# Increased tolerance is needed for PDF test to avoid failure. After the PDF
+# backend was modified to use indexed color, there are ten pixels that differ
+# due to how the subpixel calculation is done when converting the PDF files to
+# PNG images.
+@image_comparison(['rotate_image'], remove_text=True, tol=0.35)
 def test_rotate_image():
     delta = 0.25
     x = y = np.arange(-3.0, 3.0, delta)
@@ -812,8 +786,11 @@ def test_image_preserve_size2():
                        np.identity(n, bool)[::-1])
 
 
-@image_comparison(['mask_image_over_under.png'], remove_text=True)
+@image_comparison(['mask_image_over_under.png'], remove_text=True, tol=1.0)
 def test_mask_image_over_under():
+    # Remove this line when this test image is regenerated.
+    plt.rcParams['pcolormesh.snap'] = False
+
     delta = 0.025
     x = y = np.arange(-3.0, 3.0, delta)
     X, Y = np.meshgrid(x, y)
@@ -822,11 +799,8 @@ def test_mask_image_over_under():
           (2 * np.pi * 0.5 * 1.5))
     Z = 10*(Z2 - Z1)  # difference of Gaussians
 
-    palette = copy(plt.cm.gray)
-    palette.set_over('r', 1.0)
-    palette.set_under('g', 1.0)
-    palette.set_bad('b', 1.0)
-    Zm = ma.masked_where(Z > 1.2, Z)
+    palette = plt.cm.gray.with_extremes(over='r', under='g', bad='b')
+    Zm = np.ma.masked_where(Z > 1.2, Z)
     fig, (ax1, ax2) = plt.subplots(1, 2)
     im = ax1.imshow(Zm, interpolation='bilinear',
                     cmap=palette,
@@ -864,6 +838,14 @@ def test_mask_image():
     ax2.imshow(A, interpolation='nearest')
 
 
+def test_mask_image_all():
+    # Test behavior with an image that is entirely masked does not warn
+    data = np.full((2, 2), np.nan)
+    fig, ax = plt.subplots()
+    ax.imshow(data)
+    fig.canvas.draw_idle()  # would emit a warning
+
+
 @image_comparison(['imshow_endianess.png'], remove_text=True)
 def test_imshow_endianess():
     x = np.arange(10)
@@ -879,14 +861,11 @@ def test_imshow_endianess():
 
 
 @image_comparison(['imshow_masked_interpolation'],
-                  tol={'aarch64': 0.02}.get(platform.machine(), 0.0),
+                  tol=0 if platform.machine() == 'x86_64' else 0.01,
                   remove_text=True, style='mpl20')
 def test_imshow_masked_interpolation():
 
-    cm = copy(plt.get_cmap('viridis'))
-    cm.set_over('r')
-    cm.set_under('b')
-    cm.set_bad('k')
+    cmap = plt.get_cmap('viridis').with_extremes(over='r', under='b', bad='k')
 
     N = 20
     n = colors.Normalize(vmin=0, vmax=N*N-1)
@@ -913,7 +892,7 @@ def test_imshow_masked_interpolation():
 
     for interp, ax in zip(interps, ax_grid.ravel()):
         ax.set_title(interp)
-        ax.imshow(data, norm=n, cmap=cm, interpolation=interp)
+        ax.imshow(data, norm=n, cmap=cmap, interpolation=interp)
         ax.axis('off')
 
 
@@ -1038,6 +1017,18 @@ def test_relim():
     assert ax.get_xlim() == ax.get_ylim() == (0, 1)
 
 
+def test_unclipped():
+    fig, ax = plt.subplots()
+    ax.set_axis_off()
+    im = ax.imshow([[0, 0], [0, 0]], aspect="auto", extent=(-10, 10, -10, 10),
+                   cmap='gray', clip_on=False)
+    ax.set(xlim=(0, 1), ylim=(0, 1))
+    fig.canvas.draw()
+    # The unclipped image should fill the *entire* figure and be black.
+    # Ignore alpha for this comparison.
+    assert (np.array(fig.canvas.buffer_rgba())[..., :3] == 0).all()
+
+
 def test_respects_bbox():
     fig, axs = plt.subplots(2)
     for ax in axs:
@@ -1073,7 +1064,7 @@ def test_image_cursor_formatting():
 
 @check_figures_equal()
 def test_image_array_alpha(fig_test, fig_ref):
-    """per-pixel alpha channel test"""
+    """Per-pixel alpha channel test."""
     x = np.linspace(0, 1)
     xx, yy = np.meshgrid(x, x)
 
@@ -1081,10 +1072,149 @@ def test_image_array_alpha(fig_test, fig_ref):
     alpha = zz / zz.max()
 
     cmap = plt.get_cmap('viridis')
-    ax = fig_test.add_subplot(111)
+    ax = fig_test.add_subplot()
     ax.imshow(zz, alpha=alpha, cmap=cmap, interpolation='nearest')
 
-    ax = fig_ref.add_subplot(111)
+    ax = fig_ref.add_subplot()
     rgba = cmap(colors.Normalize()(zz))
     rgba[..., -1] = alpha
     ax.imshow(rgba, interpolation='nearest')
+
+
+def test_image_array_alpha_validation():
+    with pytest.raises(TypeError, match="alpha must be a float, two-d"):
+        plt.imshow(np.zeros((2, 2)), alpha=[1, 1])
+
+
+@pytest.mark.style('mpl20')
+def test_exact_vmin():
+    cmap = copy(plt.cm.get_cmap("autumn_r"))
+    cmap.set_under(color="lightgrey")
+
+    # make the image exactly 190 pixels wide
+    fig = plt.figure(figsize=(1.9, 0.1), dpi=100)
+    ax = fig.add_axes([0, 0, 1, 1])
+
+    data = np.array(
+        [[-1, -1, -1, 0, 0, 0, 0, 43, 79, 95, 66, 1, -1, -1, -1, 0, 0, 0, 34]],
+        dtype=float,
+    )
+
+    im = ax.imshow(data, aspect="auto", cmap=cmap, vmin=0, vmax=100)
+    ax.axis("off")
+    fig.canvas.draw()
+
+    # get the RGBA slice from the image
+    from_image = im.make_image(fig.canvas.renderer)[0][0]
+    # expand the input to be 190 long and run through norm / cmap
+    direct_computation = (
+        im.cmap(im.norm((data * ([[1]] * 10)).T.ravel())) * 255
+    ).astype(int)
+
+    # check than the RBGA values are the same
+    assert np.all(from_image == direct_computation)
+
+
+@pytest.mark.network
+@pytest.mark.flaky
+def test_https_imread_smoketest():
+    v = mimage.imread('https://matplotlib.org/1.5.0/_static/logo2.png')
+
+
+# A basic ndarray subclass that implements a quantity
+# It does not implement an entire unit system or all quantity math.
+# There is just enough implemented to test handling of ndarray
+# subclasses.
+class QuantityND(np.ndarray):
+    def __new__(cls, input_array, units):
+        obj = np.asarray(input_array).view(cls)
+        obj.units = units
+        return obj
+
+    def __array_finalize__(self, obj):
+        self.units = getattr(obj, "units", None)
+
+    def __getitem__(self, item):
+        units = getattr(self, "units", None)
+        ret = super(QuantityND, self).__getitem__(item)
+        if isinstance(ret, QuantityND) or units is not None:
+            ret = QuantityND(ret, units)
+        return ret
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        func = getattr(ufunc, method)
+        if "out" in kwargs:
+            raise NotImplementedError
+        if len(inputs) == 1:
+            i0 = inputs[0]
+            unit = getattr(i0, "units", "dimensionless")
+            out_arr = func(np.asarray(i0), **kwargs)
+        elif len(inputs) == 2:
+            i0 = inputs[0]
+            i1 = inputs[1]
+            u0 = getattr(i0, "units", "dimensionless")
+            u1 = getattr(i1, "units", "dimensionless")
+            u0 = u1 if u0 is None else u0
+            u1 = u0 if u1 is None else u1
+            if ufunc in [np.add, np.subtract]:
+                if u0 != u1:
+                    raise ValueError
+                unit = u0
+            elif ufunc == np.multiply:
+                unit = f"{u0}*{u1}"
+            elif ufunc == np.divide:
+                unit = f"{u0}/({u1})"
+            else:
+                raise NotImplementedError
+            out_arr = func(i0.view(np.ndarray), i1.view(np.ndarray), **kwargs)
+        else:
+            raise NotImplementedError
+        if unit is None:
+            out_arr = np.array(out_arr)
+        else:
+            out_arr = QuantityND(out_arr, unit)
+        return out_arr
+
+    @property
+    def v(self):
+        return self.view(np.ndarray)
+
+
+def test_quantitynd():
+    q = QuantityND([1, 2], "m")
+    q0, q1 = q[:]
+    assert np.all(q.v == np.asarray([1, 2]))
+    assert q.units == "m"
+    assert np.all((q0 + q1).v == np.asarray([3]))
+    assert (q0 * q1).units == "m*m"
+    assert (q1 / q0).units == "m/(m)"
+    with pytest.raises(ValueError):
+        q0 + QuantityND(1, "s")
+
+
+def test_imshow_quantitynd():
+    # generate a dummy ndarray subclass
+    arr = QuantityND(np.ones((2, 2)), "m")
+    fig, ax = plt.subplots()
+    ax.imshow(arr)
+    # executing the draw should not raise an exception
+    fig.canvas.draw()
+
+
+@check_figures_equal(extensions=['png'])
+def test_huge_range_log(fig_test, fig_ref):
+    data = np.full((5, 5), -1, dtype=np.float64)
+    data[0:2, :] = 1E20
+
+    ax = fig_test.subplots()
+    im = ax.imshow(data, norm=colors.LogNorm(vmin=100, vmax=data.max()),
+                   interpolation='nearest', cmap='viridis')
+
+    data = np.full((5, 5), -1, dtype=np.float64)
+    data[0:2, :] = 1000
+
+    cmap = copy(plt.get_cmap('viridis'))
+    cmap.set_under('w')
+    ax = fig_ref.subplots()
+    im = ax.imshow(data, norm=colors.Normalize(vmin=100, vmax=data.max()),
+                   interpolation='nearest', cmap=cmap)

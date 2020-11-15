@@ -13,8 +13,10 @@ import os
 import shutil
 import subprocess
 import sys
+import warnings
 
 import matplotlib
+from matplotlib._api import MatplotlibDeprecationWarning
 import sphinx
 
 from datetime import datetime
@@ -27,6 +29,15 @@ sys.path.append('.')
 
 # General configuration
 # ---------------------
+
+# Unless we catch the warning explicitly somewhere, a warning should cause the
+# docs build to fail. This is especially useful for getting rid of deprecated
+# usage in the gallery.
+warnings.filterwarnings('error', append=True)
+
+# Strip backslahes in function's signature
+# To be removed when numpydoc > 0.9.x
+strip_signature_backslash = True
 
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
@@ -44,6 +55,7 @@ extensions = [
     'sphinx_gallery.gen_gallery',
     'matplotlib.sphinxext.mathmpl',
     'matplotlib.sphinxext.plot_directive',
+    'sphinxcontrib.inkscapeconverter',
     'sphinxext.custom_roles',
     'sphinxext.github',
     'sphinxext.math_symbol_table',
@@ -53,7 +65,11 @@ extensions = [
     'sphinx_copybutton',
 ]
 
-exclude_patterns = ['api/api_changes/*', 'users/whats_new/*']
+exclude_patterns = [
+    'api/prev_api_changes/api_changes_*/*',
+    # Be sure to update users/whats_new.rst:
+    'users/prev_whats_new/whats_new_3.3.0.rst',
+]
 
 
 def _check_dependencies():
@@ -65,6 +81,7 @@ def _check_dependencies():
         "PIL.Image": 'pillow',
         "sphinx_copybutton": 'sphinx_copybutton',
         "sphinx_gallery": 'sphinx_gallery',
+        "sphinxcontrib.inkscapeconverter": 'sphinxcontrib-svg2pdfconverter',
     }
     missing = []
     for name in names:
@@ -96,25 +113,36 @@ os.environ.pop("DISPLAY", None)
 
 autosummary_generate = True
 
-autodoc_docstring_signature = True
-if sphinx.version_info < (1, 8):
-    autodoc_default_flags = ['members', 'undoc-members']
-else:
-    autodoc_default_options = {'members': None, 'undoc-members': None}
+# we should ignore warnings coming from importing deprecated modules for
+# autodoc purposes, as this will disappear automatically when they are removed
+warnings.filterwarnings('ignore', category=MatplotlibDeprecationWarning,
+                        module='importlib',  # used by sphinx.autodoc.importer
+                        message=r'(\n|.)*module was deprecated.*')
 
-nitpicky = True
+autodoc_docstring_signature = True
+autodoc_default_options = {'members': None, 'undoc-members': None}
+
+# make sure to ignore warnings that stem from simply inspecting deprecated
+# class-level attributes
+warnings.filterwarnings('ignore', category=MatplotlibDeprecationWarning,
+                        module='sphinx.util.inspect')
+
+# missing-references names matches sphinx>=3 behavior, so we can't be nitpicky
+# for older sphinxes.
+nitpicky = sphinx.version_info >= (3,)
 # change this to True to update the allowed failures
 missing_references_write_json = False
 missing_references_warn_unused_ignores = False
 
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'cycler': ('https://matplotlib.org/cycler', None),
-    'dateutil': ('https://dateutil.readthedocs.io/en/stable/', None),
-    'numpy': ('https://docs.scipy.org/doc/numpy/', None),
-    'pandas': ('https://pandas.pydata.org/pandas-docs/stable/', None),
     'Pillow': ('https://pillow.readthedocs.io/en/stable/', None),
-    'pytest': ('https://pytest.org/en/stable', None),
+    'cycler': ('https://matplotlib.org/cycler/', None),
+    'dateutil': ('https://dateutil.readthedocs.io/en/stable/', None),
+    'ipykernel': ('https://ipykernel.readthedocs.io/en/latest/', None),
+    'numpy': ('https://numpy.org/doc/stable/', None),
+    'pandas': ('https://pandas.pydata.org/pandas-docs/stable/', None),
+    'pytest': ('https://pytest.org/en/stable/', None),
+    'python': ('https://docs.python.org/3/', None),
     'scipy': ('https://docs.scipy.org/doc/scipy/reference/', None),
 }
 
@@ -127,14 +155,17 @@ sphinx_gallery_conf = {
     'doc_module': ('matplotlib', 'mpl_toolkits'),
     'reference_url': {
         'matplotlib': None,
-        'numpy': 'https://docs.scipy.org/doc/numpy',
-        'scipy': 'https://docs.scipy.org/doc/scipy/reference',
+        'numpy': 'https://docs.scipy.org/doc/numpy/',
+        'scipy': 'https://docs.scipy.org/doc/scipy/reference/',
     },
     'backreferences_dir': 'api/_as_gen',
     'subsection_order': gallery_order.sectionorder,
     'within_subsection_order': gallery_order.subsectionorder,
     'remove_config_comments': True,
     'min_reported_time': 1,
+    'thumbnail_size': (320, 224),
+    'compress_images': ('thumbnails', 'images'),
+    'matplotlib_animations': True,
 }
 
 plot_gallery = 'True'
@@ -170,7 +201,12 @@ try:
 except (subprocess.CalledProcessError, FileNotFoundError):
     SHA = matplotlib.__version__
 
-html_context = {'sha': SHA}
+html_context = {
+    'sha': SHA,
+    # This will disable any analytics in the HTML templates (currently Google
+    # Analytics.)
+    'include_analytics': False,
+}
 
 project = 'Matplotlib'
 copyright = ('2002 - 2012 John Hunter, Darren Dale, Eric Firing, '
@@ -259,9 +295,11 @@ html_index = 'index.html'
 
 # Custom sidebar templates, maps page names to templates.
 html_sidebars = {
-    'index': ['sidebar_announcement.html', 'sidebar_versions.html',
-              'donate_sidebar.html'],
-    '**': ['localtoc.html', 'relations.html', 'pagesource.html']
+    'index': [
+        # 'sidebar_announcement.html',
+        'sidebar_versions.html',
+        'donate_sidebar.html'],
+    '**': ['localtoc.html', 'pagesource.html']
 }
 
 # If false, no module index is generated.
@@ -337,10 +375,7 @@ latex_appendices = []
 # If false, no module index is generated.
 latex_use_modindex = True
 
-if hasattr(sphinx, 'version_info') and sphinx.version_info[:2] >= (1, 4):
-    latex_toplevel_sectioning = 'part'
-else:
-    latex_use_parts = True
+latex_toplevel_sectioning = 'part'
 
 # Show both class-level docstring and __init__ docstring in class
 # documentation
@@ -370,7 +405,9 @@ html4_writer = True
 inheritance_node_attrs = dict(fontsize=16)
 
 graphviz_dot = shutil.which('dot')
-graphviz_output_format = 'svg'
+# Still use PNG until SVG linking is fixed
+# https://github.com/sphinx-doc/sphinx/issues/3176
+# graphviz_output_format = 'svg'
 
 
 def setup(app):

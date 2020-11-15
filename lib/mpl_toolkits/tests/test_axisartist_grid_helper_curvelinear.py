@@ -7,7 +7,7 @@ from matplotlib.projections import PolarAxes
 from matplotlib.transforms import Affine2D, Transform
 from matplotlib.testing.decorators import image_comparison
 
-from mpl_toolkits.axes_grid1.parasite_axes import ParasiteAxesAuxTrans
+from mpl_toolkits.axes_grid1.parasite_axes import ParasiteAxes
 from mpl_toolkits.axisartist import SubplotHost
 from mpl_toolkits.axes_grid1.parasite_axes import host_subplot_class_factory
 from mpl_toolkits.axisartist import angle_helper
@@ -17,7 +17,7 @@ from mpl_toolkits.axisartist.grid_helper_curvelinear import \
 
 
 @image_comparison(['custom_transform.png'], style='default',
-                  tol={'aarch64': 0.034}.get(platform.machine(), 0.03))
+                  tol=0.03 if platform.machine() == 'x86_64' else 0.034)
 def test_custom_transform():
     class MyTransform(Transform):
         input_dims = output_dims = 2
@@ -68,7 +68,7 @@ def test_custom_transform():
     ax1 = SubplotHost(fig, 1, 1, 1, grid_helper=grid_helper)
     fig.add_subplot(ax1)
 
-    ax2 = ParasiteAxesAuxTrans(ax1, tr, "equal")
+    ax2 = ParasiteAxes(ax1, tr, viewlim_mode="equal")
     ax1.parasites.append(ax2)
     ax2.plot([3, 6], [5.0, 10.])
 
@@ -130,7 +130,7 @@ def test_polar_box():
     axis.get_helper()._extremes = -180, 90
 
     # A parasite axes with given transform
-    ax2 = ParasiteAxesAuxTrans(ax1, tr, "equal")
+    ax2 = ParasiteAxes(ax1, tr, viewlim_mode="equal")
     assert ax2.transData == tr + ax1.transData
     # Anything you draw in ax2 will match the ticks and grids of ax1.
     ax1.parasites.append(ax2)
