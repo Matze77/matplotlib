@@ -3056,6 +3056,7 @@ class Figure(FigureBase):
         if kwargs["makedirs"]:
             dirs = "/".join(fname.split("/")[:-1])
             os.makedirs(dirs, exist_ok=True)
+            kwargs.pop("makedirs")
 
         kwargs.setdefault('dpi', mpl.rcParams['savefig.dpi'])
         if transparent is None:
