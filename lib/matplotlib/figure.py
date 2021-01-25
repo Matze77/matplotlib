@@ -43,6 +43,7 @@ from matplotlib.transforms import (Affine2D, Bbox, BboxTransformTo,
                                    TransformedBbox)
 import matplotlib._layoutgrid as layoutgrid
 import os
+import pathlib
 
 _log = logging.getLogger(__name__)
 
@@ -3054,7 +3055,7 @@ class Figure(FigureBase):
         """
         kwargs.setdefault('makedirs', True)
         if kwargs["makedirs"]:
-            dirs = "/".join(fname.split("/")[:-1])
+            dirs = pathlib.Path(fname).parent
             os.makedirs(dirs, exist_ok=True)
             kwargs.pop("makedirs")
 
